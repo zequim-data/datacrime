@@ -23,7 +23,7 @@ class _MapScreenState extends State<MapScreen> {
   final Completer<GoogleMapController> _controller = Completer();
   final TextEditingController _searchController = TextEditingController();
 
-  // --- ATENÇÃO: VERIFIQUE SE A 'GEOCODING API' ESTÁ ATIVA NO GOOGLE CLOUD ---
+  // --- SUA CHAVE AQUI ---
   final String googleApiKey = "AIzaSyDszIW2iBdyxbIo_NavRtpReKn8Lkrcbr8"; 
   final String baseUrl = "https://zecchin-api-997663776889.southamerica-east1.run.app";
 
@@ -44,13 +44,14 @@ class _MapScreenState extends State<MapScreen> {
     return "acidente";
   }
 
-  // --- 1. COR MAIS VIVA (LARANJA NEON) ---
   Color get themeColor => Colors.orangeAccent; 
 
-  // --- BUSCA DE ENDEREÇO ---
+  // --- BUSCA ENDEREÇO ---
   Future<void> _buscarPorTexto(String endereco) async {
     if (endereco.isEmpty) return;
     setState(() => carregando = true);
+    // Esconde teclado para não atrapalhar
+    FocusScope.of(context).unfocus();
     
     final url = Uri.parse("https://maps.googleapis.com/maps/api/geocode/json?address=$endereco&key=$googleApiKey");
 
@@ -66,8 +67,7 @@ class _MapScreenState extends State<MapScreen> {
         controller.animateCamera(CameraUpdate.newLatLngZoom(destino, 16));
         buscarCrimes(destino);
       } else {
-        // Mostra o erro real do Google (ex: REQUEST_DENIED)
-        _snack("Erro Google: ${data['status']} - Verifique se a Geocoding API está ativada.");
+        _snack("Erro Google: ${data['status']}");
       }
     } catch (e) {
       _snack("Erro na busca: $e");
@@ -92,21 +92,18 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
-  // --- GERADOR DE MARCADOR (BOLINHA) ---
+  // --- GERADOR DE ICONES ---
   Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
-    final Paint paint = Paint()..color = cor.withOpacity(1.0); // Opacidade total para cor viva
-    final int size = 28; // Tamanho levemente ajustado
+    final Paint paint = Paint()..color = cor.withOpacity(1.0);
+    final int size = 28;
 
-    // Fundo
     canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, paint);
     
-    // Borda
     Paint borderPaint = Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 2.0; 
     canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, borderPaint);
 
-    // Texto (Só mostra se > 1 para limpar visual, ou se for cluster)
     if (int.tryParse(texto) != null && int.parse(texto) > 1) {
       TextPainter painter = TextPainter(textDirection: TextDirection.ltr);
       painter.text = TextSpan(text: texto, style: const TextStyle(fontSize: 11, color: Colors.black, fontWeight: FontWeight.bold));
@@ -119,7 +116,7 @@ class _MapScreenState extends State<MapScreen> {
     return BitmapDescriptor.fromBytes(data!.buffer.asUint8List());
   }
 
-  // --- 2. BUSCA COM AGRUPAMENTO (CLUSTERING) ---
+  // --- BUSCA DADOS ---
   Future<void> buscarCrimes(LatLng pos) async {
     setState(() {
       pontoSelecionado = pos;
@@ -138,31 +135,23 @@ class _MapScreenState extends State<MapScreen> {
         if (crimes.isEmpty) _snack("Nenhum registro encontrado.");
 
         Map<String, int> counts = {};
-        
-        // --- LOGICA DE AGRUPAMENTO (CLUSTERING) ---
-        Map<String, int> clusterCount = {}; // Chave: "lat_lon", Valor: Total
-        Map<String, dynamic> clusterData = {}; // Guarda um exemplar para pegar tipo/severidade
+        Map<String, int> clusterCount = {}; 
+        Map<String, dynamic> clusterData = {};
 
         for (var c in crimes) {
             String latLonKey = "${c['lat']}_${c['lon']}";
             int qtd = c['quantidade'] ?? 1;
-            
-            // Soma no cluster
             clusterCount[latLonKey] = (clusterCount[latLonKey] ?? 0) + qtd;
-            clusterData[latLonKey] = c; // Guarda referência
+            clusterData[latLonKey] = c; 
 
-            // Estatística Global
             String tipo = (c['tipo'] ?? 'N/I').toString().toUpperCase();
             counts[tipo] = (counts[tipo] ?? 0) + 1;
         }
 
         Set<Marker> newMarkers = {};
-
-        // Agora criamos marcadores baseados nos CLUSTERS, não na lista bruta
         for (var key in clusterCount.keys) {
             var dados = clusterData[key];
             int totalCluster = clusterCount[key]!;
-            
             double l = double.parse(dados['lat'].toString());
             double ln = double.parse(dados['lon'].toString());
 
@@ -172,18 +161,15 @@ class _MapScreenState extends State<MapScreen> {
               if (sev == 'FATAL') corMarker = Colors.red[900]!; 
             }
 
-            // O ícone agora exibe o TOTAL naquele ponto
             BitmapDescriptor icon = await _criarIconeCustomizado("$totalCluster", corMarker);
 
             newMarkers.add(Marker(
               markerId: MarkerId(key),
               position: LatLng(l, ln),
               icon: icon,
-              // Ao clicar, busca detalhes daquela coordenada (o backend já traz tudo dali)
               onTap: () => buscarDetalhesPonto(LatLng(l, ln)),
             ));
         }
-        // -------------------------------------------
 
         setState(() {
           _markers = newMarkers;
@@ -215,6 +201,7 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  // --- GAVETA ---
   void _exibirGavetaDetalhes(List<dynamic> lista) {
     showModalBottomSheet(
       context: context, backgroundColor: Colors.black.withOpacity(0.9), isScrollControlled: true,
@@ -324,6 +311,18 @@ class _MapScreenState extends State<MapScreen> {
 
   void _snack(String t) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t), backgroundColor: Colors.red));
 
+  // --- FUNÇÃO DE PROTEÇÃO (A MÁGICA) ---
+  // Esse widget impede que qualquer toque no filho passe para o mapa
+  Widget _bloqueioMapa({required Widget child}) {
+    return GestureDetector(
+      onTap: () {}, // Engole o clique
+      onVerticalDragUpdate: (_) {}, // Engole arrasto vertical (mapa não sobe/desce)
+      onHorizontalDragUpdate: (_) {}, // Engole arrasto horizontal (mapa não gira)
+      behavior: HitTestBehavior.opaque, // Garante que pega tudo na área do widget
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -344,14 +343,14 @@ class _MapScreenState extends State<MapScreen> {
         ],
       ),
       body: Stack(children: [
+        // MAPA NO FUNDO
         GoogleMap(
           mapType: MapType.normal, initialCameraPosition: const CameraPosition(target: LatLng(-23.5505, -46.6333), zoom: 14.4746),
           onMapCreated: (c) { _controller.complete(c); }, markers: _markers, circles: _circles, myLocationEnabled: true, myLocationButtonEnabled: false, zoomControlsEnabled: false, onTap: buscarCrimes,
         ),
         
-        // --- 3. PROTEÇÃO DE CLIQUE NO INPUT ---
-        Positioned(top: 50, left: 15, right: 15, child: GestureDetector(
-            onTap: (){}, // Bloqueia toque
+        // --- 1. CAMADA DE BUSCA (Blindada) ---
+        Positioned(top: 50, left: 15, right: 15, child: _bloqueioMapa(
             child: Container(
               decoration: BoxDecoration(color: Colors.black.withOpacity(0.85), borderRadius: BorderRadius.circular(30), border: Border.all(color: themeColor.withOpacity(0.5))),
               child: TextField(
@@ -363,27 +362,29 @@ class _MapScreenState extends State<MapScreen> {
               ),
         ))),
 
-        // --- 3. PROTEÇÃO DE CLIQUE NO SLIDER (HitTestBehavior) ---
-        Positioned(top: 120, left: 15, right: 15, child: GestureDetector(
-            onTap: () {}, // Consome cliques simples
-            behavior: HitTestBehavior.opaque, // Garante que o toque não passa pro mapa
+        // --- 2. CAMADA DO SLIDER (Blindada) ---
+        Positioned(top: 120, left: 15, right: 15, child: _bloqueioMapa(
             child: Column(children: [
               Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.black.withOpacity(0.85), borderRadius: BorderRadius.circular(15), border: Border.all(color: themeColor.withOpacity(0.5))),
-                child: Column(children: [Text("RAIO: ${raioBusca.toInt()} METROS", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 11)), Slider(value: raioBusca, min: 10, max: 1000, divisions: 99, activeColor: themeColor, inactiveColor: Colors.grey[800], onChanged: (v) => setState(() { raioBusca = v; _atualizarCirculo(); }), onChangeEnd: (v) { if (pontoSelecionado != null) buscarCrimes(pontoSelecionado!); })]),
+                child: Column(children: [
+                  Text("RAIO: ${raioBusca.toInt()} METROS", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 11)), 
+                  // Slider (Ele lida com o arrasto horizontal dele mesmo, o _bloqueioMapa protege o resto)
+                  Slider(value: raioBusca, min: 10, max: 1000, divisions: 99, activeColor: themeColor, inactiveColor: Colors.grey[800], onChanged: (v) => setState(() { raioBusca = v; _atualizarCirculo(); }), onChangeEnd: (v) { if (pontoSelecionado != null) buscarCrimes(pontoSelecionado!); })
+                ]),
               ),
               const SizedBox(height: 10),
-              // Botões de Ano
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [_btn("2025", "2025"), _btn("3 ANOS", "3_anos"), _btn("5 ANOS", "5_anos")]),
             ]),
         )),
 
+        // GPS
         Positioned(bottom: 20, left: 15, child: FloatingActionButton(backgroundColor: themeColor, onPressed: _gps, child: const Icon(Icons.my_location, color: Colors.black))),
         
-        // Estatísticas
-        if (estatisticasMarcas.isNotEmpty) Positioned(bottom: 20, right: 15, child: GestureDetector(
-          onTap: (){}, // Protege clique na lista
+        // --- 3. CAMADA DE ESTATÍSTICAS (Blindada) ---
+        if (estatisticasMarcas.isNotEmpty) Positioned(bottom: 20, right: 15, child: _bloqueioMapa(
           child: Container(width: 200, padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.black.withOpacity(0.9), borderRadius: BorderRadius.circular(15), border: Border.all(color: themeColor.withOpacity(0.5))), child: Column(mainAxisSize: MainAxisSize.min, children: [Text(menuIndex == 2 ? "TOP TIPOS" : "TOP MARCAS", style: TextStyle(color: themeColor, fontSize: 10, fontWeight: FontWeight.bold)), Divider(color: themeColor, height: 15), ... (estatisticasMarcas.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(5).map((e) => Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Flexible(child: Text(e.key, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 10))), Text("${e.value}", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 10))]))).toList()]))
         )),
+        
         if (carregando) Center(child: CircularProgressIndicator(color: themeColor, strokeWidth: 8)),
       ]),
     );
