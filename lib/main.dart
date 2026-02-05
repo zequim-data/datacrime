@@ -25,7 +25,7 @@ class _MapScreenState extends State<MapScreen> {
 
   // --- ESTADOS DO APP ---
   Set<Marker> _markers = {};
-  Set<Circle> _circles = {}; // NOVO: Para desenhar o raio no mapa
+  Set<Circle> _circles = {};
   LatLng? pontoSelecionado;
   
   double raioBusca = 300.0;
@@ -35,7 +35,6 @@ class _MapScreenState extends State<MapScreen> {
   Map<String, int> estatisticasMarcas = {};
   bool carregando = false;
 
-  // URL DA SUA API NO CLOUD RUN
   final String baseUrl = "https://zecchin-api-997663776889.southamerica-east1.run.app";
 
   String get tipoCrimeParam {
@@ -44,7 +43,13 @@ class _MapScreenState extends State<MapScreen> {
     return "acidente";
   }
 
-  // --- ATUALIZA O CÍRCULO VISUAL NO MAPA ---
+  // Cores Dinâmicas (O que você gostou!)
+  Color get themeColor {
+    if (menuIndex == 0) return Colors.cyanAccent; // Celular
+    if (menuIndex == 1) return Colors.greenAccent; // Veículo
+    return Colors.orangeAccent; // Acidente
+  }
+
   void _atualizarCirculo() {
     if (pontoSelecionado == null) return;
     setState(() {
@@ -53,38 +58,38 @@ class _MapScreenState extends State<MapScreen> {
           circleId: const CircleId("raio_analise"),
           center: pontoSelecionado!,
           radius: raioBusca,
-          fillColor: Colors.red.withOpacity(0.15), // Vermelho transparente
-          strokeColor: Colors.red, // Borda vermelha
+          fillColor: themeColor.withOpacity(0.15), // Cor do tema bem suave
+          strokeColor: themeColor,
           strokeWidth: 2,
         )
       };
     });
   }
 
-  // --- 1. GERADOR DE BOLINHAS (TEXTO -> IMAGEM BITMAP) ---
+  // --- 1. GERADOR DE BOLINHAS (AGORA PEQUENAS: 40px) ---
   Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
     final Paint paint = Paint()..color = cor.withOpacity(0.9);
     
-    // Tamanho ajustado (menor)
-    final int size = 35; 
+    // TAMANHO REDUZIDO
+    final int size = 40; 
 
-    // Desenha o Círculo Colorido
+    // Círculo Fundo
     canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, paint);
     
-    // Desenha Borda Branca
+    // Borda
     Paint borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3; 
+      ..strokeWidth = 2; 
     canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, borderPaint);
 
-    // Desenha o Texto (Número)
+    // Texto
     TextPainter painter = TextPainter(textDirection: TextDirection.ltr);
     painter.text = TextSpan(
       text: texto,
-      style: TextStyle(fontSize: size / 1.1, color: Colors.white, fontWeight: FontWeight.bold),
+      style: TextStyle(fontSize: 13, color: Colors.black, fontWeight: FontWeight.bold), // Fonte preta pra ler melhor no colorido
     );
     painter.layout();
     painter.paint(canvas, Offset((size - painter.width) / 2, (size - painter.height) / 2));
@@ -94,12 +99,12 @@ class _MapScreenState extends State<MapScreen> {
     return BitmapDescriptor.fromBytes(data!.buffer.asUint8List());
   }
 
-  // --- 2. BUSCAR DADOS RESUMIDOS (BOLINHAS) ---
+  // --- 2. BUSCAR DADOS ---
   Future<void> buscarCrimes(LatLng pos) async {
     setState(() {
       pontoSelecionado = pos;
       carregando = true;
-      _atualizarCirculo(); // Desenha o raio vermelho assim que clica
+      _atualizarCirculo();
     });
 
     try {
@@ -119,12 +124,10 @@ class _MapScreenState extends State<MapScreen> {
             final l = double.parse(c['lat'].toString());
             final ln = double.parse(c['lon'].toString());
             
-            // Contagem para o ranking
             String tipo = (c['tipo'] ?? 'N/I').toString().toUpperCase();
             counts[tipo] = (counts[tipo] ?? 0) + 1;
 
-            // Lógica de Cores e Números
-            Color corMarker = Colors.yellow;
+            Color corMarker = themeColor; 
             int qtd = c['quantidade'] ?? 1;
             String textoLabel = "$qtd"; 
 
@@ -132,13 +135,12 @@ class _MapScreenState extends State<MapScreen> {
               String sev = c['severidade'] ?? 'LEVE';
               if (sev == 'FATAL') corMarker = Colors.red;
               else if (sev == 'GRAVE') corMarker = Colors.orange;
-              else corMarker = Colors.purpleAccent; 
+              else corMarker = Colors.yellow; 
             } else { // Crimes
-              if (qtd > 10) corMarker = Colors.red;
-              else if (qtd > 5) corMarker = Colors.orange;
+               if (qtd > 10) corMarker = Colors.red;
+               else if (qtd > 5) corMarker = Colors.orange;
             }
 
-            // Gera o ícone
             BitmapDescriptor icon = await _criarIconeCustomizado(textoLabel, corMarker);
 
             newMarkers.add(Marker(
@@ -155,14 +157,13 @@ class _MapScreenState extends State<MapScreen> {
         });
       }
     } catch (e) {
-      print("Erro ao buscar crimes: $e");
-      _snack("Erro de conexão com o servidor.");
+      _snack("Erro de conexão.");
     } finally {
       setState(() => carregando = false);
     }
   }
 
-  // --- 3. BUSCAR DETALHES (GAVETA) ---
+  // --- 3. BUSCAR DETALHES ---
   Future<void> buscarDetalhesPonto(LatLng pos) async {
     setState(() => carregando = true);
     final url = Uri.parse(
@@ -174,8 +175,6 @@ class _MapScreenState extends State<MapScreen> {
         String body = utf8.decode(response.bodyBytes);
         final Map<String, dynamic> responseData = json.decode(body);
         _exibirGavetaDetalhes(responseData['data'] ?? []);
-      } else {
-        _snack("Erro no servidor: ${response.statusCode}");
       }
     } catch (e) {
       _snack("Erro ao buscar detalhes.");
@@ -184,11 +183,11 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  // --- 4. EXIBIR A GAVETA (UI) ---
+  // --- 4. GAVETA (UI DARK HACKER) ---
   void _exibirGavetaDetalhes(List<dynamic> lista) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white, // Fundo claro agora
+      backgroundColor: Colors.black.withOpacity(0.9), // Fundo Preto Hacker
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
@@ -200,11 +199,11 @@ class _MapScreenState extends State<MapScreen> {
         builder: (_, scroll) => Container(
           padding: const EdgeInsets.all(20),
           child: Column(children: [
-            Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))),
+            Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10))),
             const SizedBox(height: 15),
             
-            Text("${lista.length} REGISTROS NESTE LOCAL", style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 16)),
-            const Divider(height: 25),
+            Text("${lista.length} REGISTROS ENCONTRADOS", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 16)),
+            Divider(color: themeColor, height: 25),
 
             Expanded(
                 child: ListView.builder(
@@ -213,69 +212,34 @@ class _MapScreenState extends State<MapScreen> {
               itemBuilder: (context, i) {
                 final c = lista[i];
                 bool isAcidente = menuIndex == 2; 
-
-                Color corTitulo = Colors.blue[800]!;
-                String severidade = "";
-                if (isAcidente) {
-                   severidade = c['severidade'] ?? 'LEVE';
-                   if (severidade == 'FATAL') corTitulo = Colors.red[800]!;
-                   else if (severidade == 'GRAVE') corTitulo = Colors.orange[800]!;
-                   else corTitulo = Colors.purple[800]!;
-                }
-
                 return Card(
-                  elevation: 2,
-                  color: Colors.grey[50],
+                  color: Colors.white.withOpacity(0.08), // Card semitransparente
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   child: ExpansionTile(
-                    iconColor: corTitulo,
-                    collapsedIconColor: Colors.grey,
-                    title: Text("${c['rubrica'] ?? 'OCORRÊNCIA'}", style: TextStyle(color: corTitulo, fontWeight: FontWeight.bold, fontSize: 14)),
-                    subtitle: Row(
-                      children: [
-                        Text("${c['data'] ?? 'DATA N/I'}", style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                        if (isAcidente) ...[
-                          const SizedBox(width: 10),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(color: corTitulo.withOpacity(0.1), borderRadius: BorderRadius.circular(4), border: Border.all(color: corTitulo.withOpacity(0.5))),
-                            child: Text(severidade, style: TextStyle(color: corTitulo, fontSize: 10, fontWeight: FontWeight.bold))
-                          )
-                        ]
-                      ],
-                    ),
+                    iconColor: themeColor,
+                    collapsedIconColor: Colors.white54,
+                    title: Text("${c['rubrica'] ?? 'OCORRÊNCIA'}", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 14)),
+                    subtitle: Text("${c['data'] ?? ''}", style: const TextStyle(color: Colors.white70, fontSize: 11)),
                     children: [
                       Padding(
                         padding: const EdgeInsets.all(15),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           if (isAcidente) ...[
-                             // Ícones de Estatística
                              Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                                 _iconStat(Icons.directions_car, c['autos'], "Carros", Colors.black54),
-                                 _iconStat(Icons.two_wheeler, c['motos'], "Motos", Colors.black54),
-                                 _iconStat(Icons.directions_walk, c['pedestres'], "Pedestres", Colors.black54),
+                                 _iconStat(Icons.directions_car, c['autos'], "Carros"),
+                                 _iconStat(Icons.two_wheeler, c['motos'], "Motos"),
+                                 _iconStat(Icons.directions_walk, c['pedestres'], "Pedestres"),
                              ]),
-                             const SizedBox(height: 15),
-                             if (c['lista_veiculos'] != null && (c['lista_veiculos'] as List).isNotEmpty) ...[
-                               const Text("VEÍCULOS:", style: TextStyle(color: Colors.black54, fontSize: 10, fontWeight: FontWeight.bold)),
-                               const SizedBox(height: 5),
-                               ... (c['lista_veiculos'] as List).map((v) => _cardVeiculo(v)).toList(),
-                               const SizedBox(height: 15),
-                             ],
-                             if (c['lista_pessoas'] != null && (c['lista_pessoas'] as List).isNotEmpty) ...[
-                               const Text("VÍTIMAS / ENVOLVIDOS:", style: TextStyle(color: Colors.black54, fontSize: 10, fontWeight: FontWeight.bold)),
-                               const SizedBox(height: 5),
-                               ... (c['lista_pessoas'] as List).map((p) => _cardPessoa(p)).toList(),
-                             ],
-                             const Divider(height: 20),
-                             _itemInfo("Local:", c['local_texto'], Colors.black87),
+                             const SizedBox(height: 10),
+                             _itemInfo("Severidade:", c['severidade']),
+                             _itemInfo("Local:", c['local_texto']),
                           ] else ...[
-                              _itemInfo("Marca/Objeto:", c['marca'], Colors.black87),
+                              _itemInfo("Marca:", c['marca']),
                               if (menuIndex == 1) ...[
-                                _itemInfo("Placa:", c['placa'], Colors.black87),
-                                _itemInfo("Cor:", c['cor'], Colors.black87),
+                                _itemInfo("Placa:", c['placa']),
+                                _itemInfo("Cor:", c['cor']),
                               ],
-                              _itemInfo("Endereço:", c['local_texto'], Colors.black87),
+                              _itemInfo("Endereço:", c['local_texto']),
                           ]
                         ]),
                       )
@@ -290,62 +254,11 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  // --- WIDGETS AUXILIARES ---
-  Widget _cardVeiculo(dynamic v) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(5),
-        border: Border(left: BorderSide(color: Colors.blue.withOpacity(0.5), width: 3))
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text("${v['modelo'] ?? 'Modelo N/I'}  (${v['ano_fab'] ?? '-'})", style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 12)),
-        const SizedBox(height: 2),
-        Text("Cor: ${v['cor'] ?? '-'} • Tipo: ${v['tipo'] ?? '-'}", style: const TextStyle(color: Colors.black54, fontSize: 11)),
-      ]),
-    );
-  }
-
-  Widget _cardPessoa(dynamic p) {
-    Color corLesao = Colors.grey;
-    String lesao = (p['lesao'] ?? '').toString().toUpperCase();
-    if (lesao.contains("FATAL") || lesao.contains("MORTO")) corLesao = Colors.red;
-    else if (lesao.contains("GRAVE")) corLesao = Colors.orange;
-    else if (lesao.contains("LEVE")) corLesao = Colors.blue;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(5),
-        border: Border(left: BorderSide(color: corLesao.withOpacity(0.8), width: 3))
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.person, size: 16, color: corLesao),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text("${p['tipo_vitima'] ?? 'VÍTIMA'} • ${p['sexo'] ?? '?'} • ${p['idade'] != null ? '${p['idade']} anos' : '-'}", 
-                  style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 12)),
-              const SizedBox(height: 2),
-              Text("Lesão: ${p['lesao'] ?? 'N/I'} • ${p['profissao'] ?? '-'}", 
-                  style: const TextStyle(color: Colors.black54, fontSize: 11)),
-            ]),
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _iconStat(IconData icon, dynamic count, String label, Color color) {
+  Widget _iconStat(IconData icon, dynamic count, String label) {
     int val = 0;
     if (count is int) val = count;
     else if (count is double) val = count.toInt();
+    Color color = val > 0 ? Colors.white : Colors.white24;
     return Column(children: [
         Icon(icon, color: color, size: 24),
         Text(val.toString(), style: TextStyle(color: color, fontWeight: FontWeight.bold)),
@@ -353,13 +266,13 @@ class _MapScreenState extends State<MapScreen> {
     ]);
   }
 
-  Widget _itemInfo(String label, String? v, Color textColor) {
+  Widget _itemInfo(String label, String? v) {
     if (v == null || v.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text("$label ", style: TextStyle(color: Colors.blue[800], fontWeight: FontWeight.bold, fontSize: 12)),
-        Expanded(child: Text(v, style: TextStyle(color: textColor, fontSize: 12))),
+        Text("$label ", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 12)),
+        Expanded(child: Text(v, style: const TextStyle(color: Colors.white, fontSize: 12))),
       ]),
     );
   }
@@ -376,21 +289,17 @@ class _MapScreenState extends State<MapScreen> {
 
   void _snack(String t) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t), backgroundColor: Colors.red));
 
-  // --- CONSTRUÇÃO DA TELA (BUILD) ---
   @override
   Widget build(BuildContext context) {
-    // COR PRINCIPAL AGORA É VERMELHA 🔴
-    Color themeColor = Colors.red; 
-
     return Scaffold(
-      backgroundColor: Colors.white, // Fundo branco
+      backgroundColor: Colors.white, // Fundo do App Branco (Mapa Claro)
       
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: menuIndex,
-        backgroundColor: Colors.white,
-        selectedItemColor: themeColor,
-        unselectedItemColor: Colors.grey,
-        elevation: 10,
+        backgroundColor: Colors.black, // BARRA PRETA
+        selectedItemColor: themeColor, // Cores Vivas
+        unselectedItemColor: Colors.white30,
+        type: BottomNavigationBarType.fixed, // Fixa para não pular
         onTap: (i) {
           setState(() { 
             menuIndex = i; 
@@ -409,7 +318,7 @@ class _MapScreenState extends State<MapScreen> {
 
       body: Stack(children: [
         
-        // CAMADA 1: O MAPA (Sem estilo dark)
+        // CAMADA 1: O MAPA CLARO (Padrão)
         GoogleMap(
           mapType: MapType.normal,
           initialCameraPosition: const CameraPosition(
@@ -418,74 +327,77 @@ class _MapScreenState extends State<MapScreen> {
           ),
           onMapCreated: (GoogleMapController controller) {
             _controller.complete(controller);
-            // NÃO setamos mais estilo, ele vai usar o padrão (Claro)
           },
           markers: _markers,
-          circles: _circles, // Adicionado o círculo
+          circles: _circles,
           myLocationEnabled: true,
           myLocationButtonEnabled: false,
           zoomControlsEnabled: false,
           onTap: (pos) => buscarCrimes(pos),
         ),
         
-        // CAMADA 2: BARRA DE BUSCA
+        // CAMADA 2: BARRA DE BUSCA (Preta/Transparente)
         Positioned(
           top: 50, left: 15, right: 15,
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white, 
+              color: Colors.black.withOpacity(0.85), // Fundo Hacker
               borderRadius: BorderRadius.circular(30),
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0,5))]
+              border: Border.all(color: themeColor.withOpacity(0.5)), // Borda Colorida
+              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)]
             ),
             child: TextField(
               controller: _searchController,
-              style: const TextStyle(color: Colors.black),
-              decoration: const InputDecoration(
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
                   hintText: "Toque no mapa para buscar...",
-                  hintStyle: TextStyle(color: Colors.grey, fontSize: 13),
-                  prefixIcon: Icon(Icons.search, color: Colors.red),
+                  hintStyle: TextStyle(color: Colors.white38, fontSize: 13),
+                  prefixIcon: Icon(Icons.search, color: themeColor),
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(vertical: 15)),
             ),
           )
         ),
 
-        // CAMADA 3: CONTROLES DE RAIO E ANO
+        // CAMADA 3: CONTROLES (Slider + Anos)
         Positioned(
           top: 120, left: 15, right: 15,
-          child: Column(children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.95), 
-                borderRadius: BorderRadius.circular(15), 
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5)]
-              ),
-              child: Column(children: [
-                // TEXTO VERMELHO AQUI
-                Text("RAIO: ${raioBusca.toInt()} METROS", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 11)),
-                Slider(
-                  value: raioBusca, 
-                  min: 10, max: 1000, divisions: 99, 
-                  activeColor: Colors.red, // SLIDER VERMELHO AQUI
-                  inactiveColor: Colors.red.withOpacity(0.2),
-                  onChanged: (v) => setState(() { 
-                    raioBusca = v; 
-                    _atualizarCirculo(); // Atualiza o círculo visual enquanto arrasta
-                  }), 
-                  onChangeEnd: (v) { if (pontoSelecionado != null) buscarCrimes(pontoSelecionado!); }
+          // GestureDetector impede que arrastar o slider mova o mapa
+          child: GestureDetector(
+            onVerticalDragUpdate: (_) {}, 
+            child: Column(children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.85), 
+                  borderRadius: BorderRadius.circular(15), 
+                  border: Border.all(color: themeColor.withOpacity(0.5))
                 ),
-              ]),
-            ),
-            const SizedBox(height: 10),
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [_btn("2025", "2025"), _btn("3 ANOS", "3_anos"), _btn("5 ANOS", "5_anos")]),
-          ])
+                child: Column(children: [
+                  Text("RAIO: ${raioBusca.toInt()} METROS", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 11)),
+                  Slider(
+                    value: raioBusca, 
+                    min: 10, max: 1000, divisions: 99, 
+                    activeColor: themeColor, 
+                    inactiveColor: Colors.grey[800],
+                    onChanged: (v) => setState(() { 
+                      raioBusca = v; 
+                      _atualizarCirculo(); 
+                    }), 
+                    onChangeEnd: (v) { if (pontoSelecionado != null) buscarCrimes(pontoSelecionado!); }
+                  ),
+                ]),
+              ),
+              const SizedBox(height: 10),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [_btn("2025", "2025"), _btn("3 ANOS", "3_anos"), _btn("5 ANOS", "5_anos")]),
+            ]),
+          )
         ),
 
         // CAMADA 4: BOTÃO GPS
         Positioned(
           bottom: 20, left: 15, 
-          child: FloatingActionButton(backgroundColor: Colors.white, onPressed: _gps, child: const Icon(Icons.my_location, color: Colors.black87))
+          child: FloatingActionButton(backgroundColor: themeColor, onPressed: _gps, child: const Icon(Icons.my_location, color: Colors.black))
         ),
 
         // CAMADA 5: LISTINHA DE ESTATÍSTICAS
@@ -495,26 +407,26 @@ class _MapScreenState extends State<MapScreen> {
             child: Container(
               width: 200, padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.95), 
+                color: Colors.black.withOpacity(0.9), 
                 borderRadius: BorderRadius.circular(15), 
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5)]
+                border: Border.all(color: themeColor.withOpacity(0.5))
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min, 
                 children: [
-                  Text(menuIndex == 2 ? "TOP TIPOS" : "TOP MARCAS", style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
-                  const Divider(color: Colors.red, height: 15),
+                  Text(menuIndex == 2 ? "TOP TIPOS" : "TOP MARCAS", style: TextStyle(color: themeColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                  Divider(color: themeColor, height: 15),
                   
                   ... (estatisticasMarcas.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))
                      .take(5)
-                     .map((e) => Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Flexible(child: Text(e.key, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.black87, fontSize: 10))), Text("${e.value}", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 10))]))).toList(),
+                     .map((e) => Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Flexible(child: Text(e.key, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 10))), Text("${e.value}", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 10))]))).toList(),
                 ]
               )
             )
           ),
           
         if (carregando)
-          const Center(child: CircularProgressIndicator(color: Colors.red, strokeWidth: 8)),
+          Center(child: CircularProgressIndicator(color: themeColor, strokeWidth: 8)),
       ]),
     );
   }
@@ -522,9 +434,9 @@ class _MapScreenState extends State<MapScreen> {
   Widget _btn(String l, String v) {
     bool s = filtroAno == v;
     return Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: ElevatedButton(style: ElevatedButton.styleFrom(
-      backgroundColor: s ? Colors.red : Colors.white,
-      foregroundColor: s ? Colors.white : Colors.black87,
-      elevation: s ? 2 : 0,
+      backgroundColor: s ? themeColor : Colors.black.withOpacity(0.8),
+      foregroundColor: s ? Colors.black : Colors.white,
+      side: BorderSide(color: s ? Colors.transparent : themeColor.withOpacity(0.5))
     ), onPressed: () { setState(() => filtroAno = v); if (pontoSelecionado != null) buscarCrimes(pontoSelecionado!); }, child: Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold))));
   }
 }
