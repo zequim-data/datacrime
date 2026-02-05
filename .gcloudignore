@@ -1,0 +1,25 @@
+# --- Ocultar coisas do Flutter (para forçar o modo Python) ---
+.dart_tool/
+.idea/
+android/
+build/
+ios/
+lib/
+linux/
+macos/
+test/
+web/
+windows/
+pubspec.yaml
+pubspec.lock
+analysis_options.yaml
+
+# --- Ocultar coisas do Git e GitHub ---
+.git/
+.github/
+.gitignore
+
+# --- Manter apenas o Backend Python ---
+!main.py
+!requirements.txt
+!.python-version
