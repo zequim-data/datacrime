@@ -69,13 +69,12 @@ class _MapScreenState extends State<MapScreen> {
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
       builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        maxChildSize: 0.9,
+        initialChildSize: 0.7, // Aumentei um pouco pois tem mais dados
+        maxChildSize: 0.95,
         expand: false,
         builder: (_, scroll) => Container(
           padding: const EdgeInsets.all(20),
           child: Column(children: [
-            // Barrinha de topo
             Container(
                 width: 40,
                 height: 5,
@@ -83,27 +82,20 @@ class _MapScreenState extends State<MapScreen> {
                     color: Colors.white24,
                     borderRadius: BorderRadius.circular(10))),
             const SizedBox(height: 15),
-
-            // Título do Drawer
             Text("${lista.length} REGISTROS NESTE LOCAL",
                 style: const TextStyle(
                     color: Colors.amber,
                     fontWeight: FontWeight.bold,
                     fontSize: 16)),
             const Divider(color: Colors.amber, height: 25),
-
-            // Lista de Cards
             Expanded(
                 child: ListView.builder(
               controller: scroll,
               itemCount: lista.length,
               itemBuilder: (context, i) {
                 final c = lista[i];
-
-                // --- LÓGICA VISUAL DIFERENCIADA ---
                 bool isAcidente = menuIndex == 2;
 
-                // Definição de Cores para Severidade
                 Color corTitulo = Colors.cyan;
                 String severidade = "";
                 if (isAcidente) {
@@ -113,7 +105,7 @@ class _MapScreenState extends State<MapScreen> {
                   else if (severidade == 'GRAVE')
                     corTitulo = Colors.orangeAccent;
                   else
-                    corTitulo = Colors.purpleAccent; // Roxo para leve
+                    corTitulo = Colors.purpleAccent;
                 }
 
                 return Card(
@@ -122,14 +114,11 @@ class _MapScreenState extends State<MapScreen> {
                   child: ExpansionTile(
                     iconColor: corTitulo,
                     collapsedIconColor: Colors.white54,
-                    // TÍTULO: Agora mostra o TIPO (ex: Atropelamento) ou RUBRICA (ex: Roubo)
                     title: Text("${c['rubrica'] ?? 'OCORRÊNCIA'}",
                         style: TextStyle(
                             color: corTitulo,
                             fontWeight: FontWeight.bold,
                             fontSize: 14)),
-
-                    // SUBTÍTULO: Data e Severidade (se for acidente)
                     subtitle: Row(
                       children: [
                         Text("${c['data'] ?? 'DATA N/I'}",
@@ -159,36 +148,58 @@ class _MapScreenState extends State<MapScreen> {
                         child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // SE FOR ACIDENTE: MOSTRA OS ÍCONES DOS ENVOLVIDOS
                               if (isAcidente) ...[
-                                const Text("Veículos e Pessoas Envolvidas:",
-                                    style: TextStyle(
-                                        color: Colors.white54, fontSize: 12)),
-                                const SizedBox(height: 8),
+                                // ÍCONES RESUMO
                                 Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceAround,
-                                  children: [
-                                    _iconStat(Icons.directions_car, c['autos'],
-                                        "Carros"),
-                                    _iconStat(
-                                        Icons.two_wheeler, c['motos'], "Motos"),
-                                    _iconStat(Icons.directions_walk,
-                                        c['pedestres'], "Pedestres"),
-                                    _iconStat(Icons.directions_bus, c['onibus'],
-                                        "Ônibus"),
-                                  ],
-                                ),
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceAround,
+                                    children: [
+                                      _iconStat(Icons.directions_car,
+                                          c['autos'], "Carros"),
+                                      _iconStat(Icons.two_wheeler, c['motos'],
+                                          "Motos"),
+                                      _iconStat(Icons.directions_walk,
+                                          c['pedestres'], "Pedestres"),
+                                    ]),
+                                const SizedBox(height: 15),
+
+                                // --- LISTA DETALHADA DE VEÍCULOS ---
+                                if (c['lista_veiculos'] != null &&
+                                    (c['lista_veiculos'] as List)
+                                        .isNotEmpty) ...[
+                                  const Text("VEÍCULOS ENVOLVIDOS:",
+                                      style: TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 5),
+                                  ...(c['lista_veiculos'] as List)
+                                      .map((v) => _cardVeiculo(v))
+                                      .toList(),
+                                  const SizedBox(height: 15),
+                                ],
+
+                                // --- LISTA DETALHADA DE PESSOAS ---
+                                if (c['lista_pessoas'] != null &&
+                                    (c['lista_pessoas'] as List)
+                                        .isNotEmpty) ...[
+                                  const Text("VÍTIMAS / ENVOLVIDOS:",
+                                      style: TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 5),
+                                  ...(c['lista_pessoas'] as List)
+                                      .map((p) => _cardPessoa(p))
+                                      .toList(),
+                                ],
+
                                 const Divider(
                                     color: Colors.white24, height: 20),
                                 _itemInfo("Local:", c['local_texto']),
-                              ]
-
-                              // SE FOR OUTROS CRIMES (SSP)
-                              else ...[
+                              ] else ...[
                                 _itemInfo("Marca/Objeto:", c['marca']),
                                 if (menuIndex == 1) ...[
-                                  // Veículos SSP
                                   _itemInfo("Placa:", c['placa']),
                                   _itemInfo("Cor:", c['cor']),
                                 ],
@@ -204,6 +215,77 @@ class _MapScreenState extends State<MapScreen> {
             )),
           ]),
         ),
+      ),
+    );
+  }
+
+  // --- NOVOS WIDGETS PARA VEÍCULOS E PESSOAS ---
+
+  Widget _cardVeiculo(Map<String, dynamic> v) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(5),
+          border: Border(
+              left: BorderSide(color: Colors.cyan.withOpacity(0.5), width: 3))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text("${v['modelo'] ?? 'Modelo N/I'}  (${v['ano_fab'] ?? '-'})",
+            style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 12)),
+        const SizedBox(height: 2),
+        Text("Cor: ${v['cor'] ?? '-'} • Tipo: ${v['tipo'] ?? '-'}",
+            style: const TextStyle(color: Colors.white70, fontSize: 11)),
+      ]),
+    );
+  }
+
+  Widget _cardPessoa(Map<String, dynamic> p) {
+    // Corzinha baseada na gravidade da lesão da pessoa
+    Color corLesao = Colors.grey;
+    String lesao = (p['lesao'] ?? '').toString().toUpperCase();
+    if (lesao.contains("FATAL"))
+      corLesao = Colors.red;
+    else if (lesao.contains("GRAVE"))
+      corLesao = Colors.orange;
+    else if (lesao.contains("LEVE")) corLesao = Colors.yellow;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(5),
+          border: Border(
+              left: BorderSide(color: corLesao.withOpacity(0.5), width: 3))),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.person, size: 16, color: corLesao),
+          const SizedBox(width: 8),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(
+                  "${p['tipo_vitima'] ?? 'VÍTIMA'} • ${p['sexo'] ?? '?'} • ${p['idade'] != null ? '${p['idade']} anos' : 'Idade N/I'}",
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12)),
+              const SizedBox(height: 2),
+              Text(
+                  "Lesão: ${p['lesao'] ?? 'N/I'} • Profissão: ${p['profissao'] ?? '-'}",
+                  style: const TextStyle(color: Colors.white70, fontSize: 11)),
+              if (p['veiculo_vitima'] != null)
+                Text("Estava em: ${p['veiculo_vitima']}",
+                    style:
+                        const TextStyle(color: Colors.white38, fontSize: 10)),
+            ]),
+          )
+        ],
       ),
     );
   }

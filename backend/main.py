@@ -105,39 +105,63 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
     lat_f = f"SAFE_CAST(REPLACE({cfg['geo_col_lat']}, ',', '.') AS FLOAT64)"
     lon_f = f"SAFE_CAST(REPLACE({cfg['geo_col_lon']}, ',', '.') AS FLOAT64)"
 
-    # Lógica customizada para trazer campos ricos do INFOSIGA
     if tipo_crime == "acidente":
+        # QUERY AVANÇADA COM ARRAY_AGG e STRUCT
+        # Isso cria uma lista de objetos aninhados para cada acidente
+        
         query = f"""
             SELECT 
-                {cfg['col_marca']} as rubrica, -- Título Principal (ex: COLISÃO, ATROPELAMENTO)
-                logradouro as local_texto,     -- Subtítulo (Endereço)
-                {cfg['col_data']} as data,
+                t.tp_sinistro_primario as rubrica,
+                t.logradouro as local_texto,
+                t.{cfg['col_data']} as data,
                 
-                -- Severidade (para exibir GRANDE e colorido)
+                -- Severidade Geral
                 CASE 
-                    WHEN COALESCE(SAFE_CAST(qtd_gravidade_fatal AS FLOAT64), 0) > 0 THEN 'FATAL' 
-                    WHEN COALESCE(SAFE_CAST(qtd_gravidade_grave AS FLOAT64), 0) > 0 THEN 'GRAVE' 
+                    WHEN COALESCE(SAFE_CAST(t.qtd_gravidade_fatal AS FLOAT64), 0) > 0 THEN 'FATAL' 
+                    WHEN COALESCE(SAFE_CAST(t.qtd_gravidade_grave AS FLOAT64), 0) > 0 THEN 'GRAVE' 
                     ELSE 'LEVE' 
                 END as severidade,
 
-                -- Contagem de Envolvidos (para ícones)
-                COALESCE(SAFE_CAST(qtd_automovel AS INT64), 0) as autos,
-                COALESCE(SAFE_CAST(qtd_motocicleta AS INT64), 0) as motos,
-                COALESCE(SAFE_CAST(qtd_pedestre AS INT64), 0) as pedestres,
-                COALESCE(SAFE_CAST(qtd_onibus AS INT64), 0) as onibus,
-                COALESCE(SAFE_CAST(qtd_caminhao AS INT64), 0) as caminhoes,
-                COALESCE(SAFE_CAST(qtd_bicicleta AS INT64), 0) as bikes
+                -- Contadores
+                COALESCE(SAFE_CAST(t.qtd_automovel AS INT64), 0) as autos,
+                COALESCE(SAFE_CAST(t.qtd_motocicleta AS INT64), 0) as motos,
+                COALESCE(SAFE_CAST(t.qtd_pedestre AS INT64), 0) as pedestres,
 
-            FROM `{cfg['tabela']}`
+                -- LISTA ESTRUTURADA DE VEÍCULOS
+                ARRAY(
+                    SELECT AS STRUCT 
+                        v.marca_modelo as modelo,
+                        v.cor_veiculo as cor,
+                        SAFE_CAST(v.ano_fab AS INT64) as ano_fab,
+                        SAFE_CAST(v.ano_modelo AS INT64) as ano_mod,
+                        v.tipo_veiculo as tipo
+                    FROM `zecchin-analytica.infosiga_raw.raw_veiculos` v 
+                    WHERE v.id_sinistro = t.id_sinistro
+                ) as lista_veiculos,
+
+                -- LISTA ESTRUTURADA DE PESSOAS
+                ARRAY(
+                    SELECT AS STRUCT 
+                        SAFE_CAST(p.idade AS INT64) as idade,
+                        p.sexo,
+                        p.gravidade_lesao as lesao,
+                        p.tipo_de_vitima as tipo_vitima,
+                        p.tipo_veiculo_vitima as veiculo_vitima,
+                        p.profissao
+                    FROM `zecchin-analytica.infosiga_raw.raw_pessoas` p 
+                    WHERE p.id_sinistro = t.id_sinistro
+                ) as lista_pessoas
+
+            FROM `{cfg['tabela']}` t
             WHERE {lat_f} = {lat} AND {lon_f} = {lon}
             LIMIT 50
         """
     else:
-        # Lógica padrão para Celulares e Veículos (SSP)
+        # Lógica padrão (SSP)
         campos = ""
         if tipo_crime == "veiculo":
             campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica"
-        else: # celular
+        else:
             campos = f"{cfg['col_marca']} as marca, rubrica"
 
         query = f"""
