@@ -24,7 +24,7 @@ class _MapScreenState extends State<MapScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   // --- ATENÇÃO: VERIFIQUE SE A 'GEOCODING API' ESTÁ ATIVA NO GOOGLE CLOUD ---
-  final String googleApiKey = "AIzaSyDj2xClrlZVaLGs1H-m6XPNsLEhMbZ64Vw"; 
+  final String googleApiKey = "AIzaSyDszIW2iBdyxbIo_NavRtpReKn8Lkrcbr8"; 
   final String baseUrl = "https://zecchin-api-997663776889.southamerica-east1.run.app";
 
   Set<Marker> _markers = {};
