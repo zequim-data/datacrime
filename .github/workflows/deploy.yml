@@ -1,28 +1,54 @@
-name: Deploy Automático Firebase
+name: Deploy Total (App + API)
+
 on:
   push:
     branches:
-      - main # Dispara sempre que você der push na branch principal
+      - main
 
 jobs:
-  build_and_deploy:
+  # --- TRILHA 1: FRONTEND (FLUTTER -> FIREBASE) ---
+  deploy_frontend:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Baixar Código
+      - name: Baixar Código
         uses: actions/checkout@v4
 
-      - name: 2. Configurar Flutter
+      - name: Configurar Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
-      - name: 3. Instalar Dependências
+      - name: Instalar Dependências Flutter
         run: flutter pub get
 
-      - name: 4. Build Web (Release)
+      - name: Build Web (Release)
         run: flutter build web --release
 
-      - name: 5. Deploy para o Firebase
+      - name: Deploy para o Firebase
         run: |
           sudo npm install -g firebase-tools
           firebase deploy --only hosting --token ${{ secrets.FIREBASE_TOKEN }}
+
+  # --- TRILHA 2: BACKEND (PYTHON -> CLOUD RUN) ---
+  deploy_backend:
+    runs-on: ubuntu-latest
+    needs: [] # Roda em paralelo com o frontend (não precisa esperar)
+    steps:
+      - name: Baixar Código
+        uses: actions/checkout@v4
+
+      - name: Autenticar no Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configurar Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy no Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: zecchin-api    # O nome exato do seu serviço no Cloud Run
+          region: southamerica-east1
+          source: .               # Envia a pasta atual (raiz)
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
