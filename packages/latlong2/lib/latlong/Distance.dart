@@ -146,8 +146,8 @@ class Distance implements DistanceCalculator {
 ///     final Distance distance = const Distance(calculator: const Vincenty());
 ///
 class DistanceVincenty extends Distance {
-  const DistanceVincenty({final bool roundResult = true})
-      : super(roundResult: roundResult, calculator: const Vincenty());
+  const DistanceVincenty({super.roundResult})
+      : super(calculator: const Vincenty());
 
   /// Radius must be greater than 0.
   DistanceVincenty.withRadius(final double radius,
@@ -165,8 +165,8 @@ class DistanceVincenty extends Distance {
 ///     final Distance distance = const Distance(calculator: const Haversine());
 ///
 class DistanceHaversine extends Distance {
-  const DistanceHaversine({final bool roundResult = true})
-      : super(roundResult: roundResult, calculator: const Haversine());
+  const DistanceHaversine({super.roundResult})
+      : super(calculator: const Haversine());
 
   /// Radius must be greater than 0.
   DistanceHaversine.withRadius(final double radius,

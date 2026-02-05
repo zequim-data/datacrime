@@ -35,35 +35,35 @@ void main() {
     setUp(() {});
 
     test('> Range', () {
-      expect(() => LatLng(-80.0, 0.0), returnsNormally);
-      expect(() => LatLng(-100.0, 0.0), throwsAssertionError);
-      expect(() => LatLng(80.0, 0.0), returnsNormally);
-      expect(() => LatLng(100.0, 0.0), throwsAssertionError);
-      expect(() => LatLng(0.0, -170.0), returnsNormally);
-      expect(() => LatLng(0.0, -190.0), throwsAssertionError);
-      expect(() => LatLng(0.0, 170.0), returnsNormally);
-      expect(() => LatLng(0.0, 190.0), throwsAssertionError);
+      expect(() => const LatLng(-80.0, 0.0), returnsNormally);
+      expect(() => const LatLng(-100.0, 0.0), throwsAssertionError);
+      expect(() => const LatLng(80.0, 0.0), returnsNormally);
+      expect(() => const LatLng(100.0, 0.0), throwsAssertionError);
+      expect(() => const LatLng(0.0, -170.0), returnsNormally);
+      expect(() => const LatLng(0.0, -190.0), throwsAssertionError);
+      expect(() => const LatLng(0.0, 170.0), returnsNormally);
+      expect(() => const LatLng(0.0, 190.0), throwsAssertionError);
     }); // end of 'Range' test
 
     test('> Rad', () {
-      expect((LatLng(-80.0, 0.0)).latitudeInRad, -1.3962634015954636);
-      expect((LatLng(90.0, 0.0)).latitudeInRad, 1.5707963267948966);
-      expect((LatLng(0.0, 80.0)).longitudeInRad, 1.3962634015954636);
-      expect((LatLng(0.0, 90.0)).longitudeInRad, 1.5707963267948966);
+      expect((const LatLng(-80.0, 0.0)).latitudeInRad, -1.3962634015954636);
+      expect((const LatLng(90.0, 0.0)).latitudeInRad, 1.5707963267948966);
+      expect((const LatLng(0.0, 80.0)).longitudeInRad, 1.3962634015954636);
+      expect((const LatLng(0.0, 90.0)).longitudeInRad, 1.5707963267948966);
     }); // end of 'Rad' test
 
     test('> toString', () {
-      expect((LatLng(-80.0, 0.0)).toString(),
+      expect((const LatLng(-80.0, 0.0)).toString(),
           'LatLng(latitude:-80.0, longitude:0.0)');
-      expect((LatLng(-80.123456, 0.0)).toString(),
+      expect((const LatLng(-80.123456, 0.0)).toString(),
           'LatLng(latitude:-80.123456, longitude:0.0)');
     }); // end of 'toString' test
 
     test('> toJson', () {
-      expect((LatLng(-80.0, 0.0)).toJson(), {
+      expect((const LatLng(-80.0, 0.0)).toJson(), {
         'coordinates': [0.0, -80.0]
       });
-      expect((LatLng(0.0, 80.0)).toJson(), {
+      expect((const LatLng(0.0, 80.0)).toJson(), {
         'coordinates': [80.0, 0.0]
       });
     });
@@ -73,18 +73,18 @@ void main() {
           LatLng.fromJson({
             'coordinates': [0.0, -80.0]
           }),
-          LatLng(-80.0, 0.0));
+          const LatLng(-80.0, 0.0));
       expect(
           LatLng.fromJson({
             'coordinates': [80.0, 0.0]
           }),
-          LatLng(0.0, 80.0));
+          const LatLng(0.0, 80.0));
     });
 
     test('> equal', () {
-      expect(LatLng(-80.0, 0.0), LatLng(-80.0, 0.0));
-      expect(LatLng(-80.0, 0.0), isNot(LatLng(-80.1, 0.0)));
-      expect(LatLng(-80.0, 0.0), isNot(LatLng(0.0, 80.0)));
+      expect(const LatLng(-80.0, 0.0), const LatLng(-80.0, 0.0));
+      expect(const LatLng(-80.0, 0.0), isNot(const LatLng(-80.1, 0.0)));
+      expect(const LatLng(-80.0, 0.0), isNot(const LatLng(0.0, 80.0)));
     }); // end of 'equal' test
   });
 }

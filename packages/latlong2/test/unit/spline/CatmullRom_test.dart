@@ -17,7 +17,7 @@ void main() async {
     setUp(() {});
 
     test('> one dimension', () {
-      final spline = CatmullRomSpline(1, 2, 2, 1);
+      const spline = CatmullRomSpline(1, 2, 2, 1);
 
       expect(spline.position(0.25), 2.09375);
       expect(spline.position(0.5), 2.125);
@@ -25,7 +25,7 @@ void main() async {
     }); // end of 'one dimension' test
 
     test('> no endpoints', () {
-      final spline = CatmullRomSpline.noEndpoints(1, 2);
+      const spline = CatmullRomSpline.noEndpoints(1, 2);
 
       expect(spline.position(0.25), 1.203125);
       expect(spline.position(0.5), 1.5);

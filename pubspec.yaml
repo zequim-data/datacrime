@@ -9,11 +9,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  # LISTA DE PACOTES (Ficam aqui embaixo de flutter: sdk: flutter)
-  flutter_map: ^8.2.0
-  latlong2: ^0.9.1
+  google_maps_flutter: ^2.5.3  # ADICIONE ESTA LINHA (A peça que faltava)
   http: ^1.2.0
   geolocator: ^13.0.0
+  # Você pode manter ou remover estas duas abaixo se não for usar o mapa antigo:
+  flutter_map: ^8.2.0 
+  latlong2: ^0.9.1
 
 dev_dependencies:
   flutter_test:

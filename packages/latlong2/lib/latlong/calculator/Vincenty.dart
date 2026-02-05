@@ -115,7 +115,7 @@ class Vincenty implements DistanceCalculator {
   @override
   LatLng offset(
       final LatLng from, final double distanceInMeter, final double bearing) {
-    final equatorialRadius = equatorRadius;
+    const equatorialRadius = equatorRadius;
 
     final latitude = from.latitudeInRad;
     final longitude = from.longitudeInRad;

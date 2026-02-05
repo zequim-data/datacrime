@@ -99,7 +99,7 @@ String decimal2sexagesimal(final double dec) {
 
   final absDec = dec.abs();
   final deg = absDec.floor();
-  buf.write(deg.toString() + '°');
+  buf.write('$deg°');
 
   final mins = (absDec - deg) * 60.0;
   final min = mins.floor();
@@ -108,7 +108,7 @@ String decimal2sexagesimal(final double dec) {
   final secs = (mins - mins.floorToDouble()) * 60.0;
   final sec = secs.floor();
   final frac = ((secs - secs.floorToDouble()) * 100.0).round();
-  buf.write(' ' + zeroPad(sec) + '.' + zeroPad(frac) + '"');
+  buf.write(' ${zeroPad(sec)}.${zeroPad(frac)}"');
 
   return buf.toString();
 }

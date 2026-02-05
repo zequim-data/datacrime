@@ -256,14 +256,14 @@ class Path<T extends LatLng> {
 
     double lat, lon, hyp;
 
-    coordinates.forEach((final T coordinate) {
+    for (var coordinate in coordinates) {
       lat = coordinate.latitudeInRad;
       lon = coordinate.longitudeInRad;
 
       X += math.cos(lat) * math.cos(lon);
       Y += math.cos(lat) * math.sin(lon);
       Z += math.sin(lat);
-    });
+    }
 
     final nrOfCoordinates = coordinates.length;
     X = X / nrOfCoordinates;

@@ -28,7 +28,7 @@ void main() async {
       expect(sexa2, '19° 23\' 32.00"');
       expect(sexa3, '50° 00\' 00.00"');
 
-      final p1 = LatLng(51.519475, -19.392222222222223);
+      const p1 = LatLng(51.519475, -19.392222222222223);
       expect(p1.toSexagesimal(), '51° 31\' 10.11" N, 19° 23\' 32.00" W');
     }); // end of 'decimal2sexagesimal' test
 
@@ -44,7 +44,7 @@ void main() async {
     }); // end of 'sexagesimal2decimal' test
 
     test('> sexagesimal2decimal2sexagesimal', () {
-      final sexa = '51° 31\' 10.11" N, 19° 23\' 32.00" W';
+      const sexa = '51° 31\' 10.11" N, 19° 23\' 32.00" W';
       expect(LatLng.fromSexagesimal(sexa).toSexagesimal(), sexa);
     }); // end of 'sexagesimal2decimal2sexagesimal' test
   });

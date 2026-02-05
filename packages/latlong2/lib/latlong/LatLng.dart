@@ -56,8 +56,8 @@ class LatLng {
   ///     51.519475, -19.37555556
   ///
   factory LatLng.fromSexagesimal(final String str) {
-    double _latitude = 0.0;
-    double _longitude = 0.0;
+    double latitude = 0.0;
+    double longitude = 0.0;
     // try format '''47° 09' 53.57" N, 8° 32' 09.04" E'''
     var splits = str.split(',');
     if (splits.length != 2) {
@@ -71,15 +71,15 @@ class LatLng {
         }
       }
     }
-    _latitude = sexagesimal2decimal(splits[0]);
-    _longitude = sexagesimal2decimal(splits[1]);
+    latitude = sexagesimal2decimal(splits[0]);
+    longitude = sexagesimal2decimal(splits[1]);
     if (str.contains('S')) {
-      _latitude = -_latitude;
+      latitude = -latitude;
     }
     if (str.contains('W')) {
-      _longitude = -_longitude;
+      longitude = -longitude;
     }
-    return LatLng(_latitude, _longitude);
+    return LatLng(latitude, longitude);
   }
 
   /// Converts lat/long values into sexagesimal
