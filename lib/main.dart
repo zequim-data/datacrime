@@ -454,7 +454,7 @@ class _MapScreenState extends State<MapScreen> {
         currentIndex: menuIndex,
         backgroundColor: Colors.black,
         selectedItemColor: themeColor,
-        unselectedItemColor: Colors.white30,
+        unselectedItemColor: Colors.white70,
         onTap: (i) {
           setState(() {
             menuIndex = i;

@@ -8,7 +8,6 @@ import numpy as np
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# CLIENTE PADRÃO (US) - Como mostra sua imagem!
 client = bigquery.Client(project='zecchin-analytica')
 
 CONFIG = {
@@ -17,6 +16,7 @@ CONFIG = {
         "col_marca": "marca_objeto",
         "col_data": "datahora_registro_bo",
         "col_ano_str": "SUBSTR(datahora_registro_bo, 1, 4)", 
+        "col_local": "logradouro",  # <--- COLUNA NOVA (Endereço)
         "geo_col_lat": "latitude",
         "geo_col_lon": "longitude"
     },
@@ -25,6 +25,7 @@ CONFIG = {
         "col_marca": "descr_marca_veiculo",
         "col_data": "datahora_registro_bo",
         "col_ano_str": "SUBSTR(datahora_registro_bo, 1, 4)",
+        "col_local": "logradouro",  # <--- COLUNA NOVA (Endereço)
         "geo_col_lat": "latitude",
         "geo_col_lon": "longitude"
     },
@@ -33,6 +34,7 @@ CONFIG = {
         "col_marca": "tp_sinistro_primario",
         "col_data": "data_sinistro",
         "col_ano_num": "ano_sinistro",
+        "col_local": "logradouro",
         "geo_col_lat": "latitude",
         "geo_col_lon": "longitude"
     }
@@ -69,8 +71,6 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
                 ELSE 'LEVE' 
             END as severidade"""
 
-    # --- AQUI ESTAVA O ERRO! ---
-    # Removi o espaço dentro da crase: `{cfg['tabela']}` t
     query = f"""
         SELECT 
             {lat_f} as lat, 
@@ -105,7 +105,7 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
         query = f"""
             SELECT 
                 t.tp_sinistro_primario as rubrica,
-                t.logradouro as local_texto,
+                t.{cfg['col_local']} as local_texto,
                 CAST(t.{cfg['col_data']} AS STRING) as data,
                 
                 CASE 
@@ -149,9 +149,14 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
             campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica"
         else:
             campos = f"{cfg['col_marca']} as marca, rubrica"
-
+        
+        # --- CORREÇÃO AQUI ---
+        # Agora puxamos 'logradouro' (cfg['col_local']) e se vier vazio, colocamos um aviso
         query = f"""
-            SELECT {campos}, CAST({cfg['col_data']} AS STRING) as data, 'Localização' as local_texto
+            SELECT 
+                {campos}, 
+                CAST({cfg['col_data']} AS STRING) as data, 
+                COALESCE({cfg['col_local']}, 'Endereço não informado') as local_texto
             FROM `{cfg['tabela']}`
             WHERE {lat_f} = {lat} AND {lon_f} = {lon}
             LIMIT 50
