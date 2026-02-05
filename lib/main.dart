@@ -61,6 +61,7 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  // --- SUBSTIRUA ESSA FUNÇÃO INTEIRA ---
   void _exibirGavetaDetalhes(List<dynamic> lista) {
     showModalBottomSheet(
       context: context,
@@ -69,12 +70,13 @@ class _MapScreenState extends State<MapScreen> {
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
       builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.7, // Aumentei um pouco pois tem mais dados
+        initialChildSize: 0.7, // Mais alto para caber os detalhes
         maxChildSize: 0.95,
         expand: false,
         builder: (_, scroll) => Container(
           padding: const EdgeInsets.all(20),
           child: Column(children: [
+            // Barrinha de topo
             Container(
                 width: 40,
                 height: 5,
@@ -82,12 +84,14 @@ class _MapScreenState extends State<MapScreen> {
                     color: Colors.white24,
                     borderRadius: BorderRadius.circular(10))),
             const SizedBox(height: 15),
+
             Text("${lista.length} REGISTROS NESTE LOCAL",
                 style: const TextStyle(
                     color: Colors.amber,
                     fontWeight: FontWeight.bold,
                     fontSize: 16)),
             const Divider(color: Colors.amber, height: 25),
+
             Expanded(
                 child: ListView.builder(
               controller: scroll,
@@ -96,6 +100,7 @@ class _MapScreenState extends State<MapScreen> {
                 final c = lista[i];
                 bool isAcidente = menuIndex == 2;
 
+                // Definição de Cores
                 Color corTitulo = Colors.cyan;
                 String severidade = "";
                 if (isAcidente) {
@@ -149,7 +154,7 @@ class _MapScreenState extends State<MapScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               if (isAcidente) ...[
-                                // ÍCONES RESUMO
+                                // ESTATÍSTICAS RÁPIDAS
                                 Row(
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceAround,
@@ -163,11 +168,11 @@ class _MapScreenState extends State<MapScreen> {
                                     ]),
                                 const SizedBox(height: 15),
 
-                                // --- LISTA DETALHADA DE VEÍCULOS ---
+                                // --- AQUI ESTÁ A NOVIDADE: LISTA DE VEÍCULOS ---
                                 if (c['lista_veiculos'] != null &&
                                     (c['lista_veiculos'] as List)
                                         .isNotEmpty) ...[
-                                  const Text("VEÍCULOS ENVOLVIDOS:",
+                                  const Text("VEÍCULOS:",
                                       style: TextStyle(
                                           color: Colors.white54,
                                           fontSize: 10,
@@ -179,7 +184,7 @@ class _MapScreenState extends State<MapScreen> {
                                   const SizedBox(height: 15),
                                 ],
 
-                                // --- LISTA DETALHADA DE PESSOAS ---
+                                // --- AQUI ESTÁ A NOVIDADE: LISTA DE PESSOAS ---
                                 if (c['lista_pessoas'] != null &&
                                     (c['lista_pessoas'] as List)
                                         .isNotEmpty) ...[
@@ -198,6 +203,7 @@ class _MapScreenState extends State<MapScreen> {
                                     color: Colors.white24, height: 20),
                                 _itemInfo("Local:", c['local_texto']),
                               ] else ...[
+                                // LAYOUT ANTIGO PARA CELULAR/VEÍCULO ROUBADO
                                 _itemInfo("Marca/Objeto:", c['marca']),
                                 if (menuIndex == 1) ...[
                                   _itemInfo("Placa:", c['placa']),
@@ -219,9 +225,10 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  // --- NOVOS WIDGETS PARA VEÍCULOS E PESSOAS ---
+  // --- ADICIONE ESTES WIDGETS NO FINAL DA CLASSE STATE ---
 
-  Widget _cardVeiculo(Map<String, dynamic> v) {
+  Widget _cardVeiculo(dynamic v) {
+    // Dynamic pq vem do JSON
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.all(8),
@@ -243,8 +250,7 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _cardPessoa(Map<String, dynamic> p) {
-    // Corzinha baseada na gravidade da lesão da pessoa
+  Widget _cardPessoa(dynamic p) {
     Color corLesao = Colors.grey;
     String lesao = (p['lesao'] ?? '').toString().toUpperCase();
     if (lesao.contains("FATAL"))
@@ -260,7 +266,7 @@ class _MapScreenState extends State<MapScreen> {
           color: Colors.white.withOpacity(0.05),
           borderRadius: BorderRadius.circular(5),
           border: Border(
-              left: BorderSide(color: corLesao.withOpacity(0.5), width: 3))),
+              left: BorderSide(color: corLesao.withOpacity(0.8), width: 3))),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -270,19 +276,14 @@ class _MapScreenState extends State<MapScreen> {
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(
-                  "${p['tipo_vitima'] ?? 'VÍTIMA'} • ${p['sexo'] ?? '?'} • ${p['idade'] != null ? '${p['idade']} anos' : 'Idade N/I'}",
+                  "${p['tipo_vitima'] ?? 'VÍTIMA'} • ${p['sexo'] ?? '?'} • ${p['idade'] != null ? '${p['idade']} anos' : '-'}",
                   style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 12)),
               const SizedBox(height: 2),
-              Text(
-                  "Lesão: ${p['lesao'] ?? 'N/I'} • Profissão: ${p['profissao'] ?? '-'}",
+              Text("Lesão: ${p['lesao'] ?? 'N/I'} • ${p['profissao'] ?? '-'}",
                   style: const TextStyle(color: Colors.white70, fontSize: 11)),
-              if (p['veiculo_vitima'] != null)
-                Text("Estava em: ${p['veiculo_vitima']}",
-                    style:
-                        const TextStyle(color: Colors.white38, fontSize: 10)),
             ]),
           )
         ],
