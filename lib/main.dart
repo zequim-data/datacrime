@@ -185,14 +185,23 @@ class _MapScreenState extends State<MapScreen> {
             counts[tipo] = (counts[tipo] ?? 0) + 1;
 
             // CORES REFINADAS (ACIDENTES VS OUTROS)
-            Color corPonto = Colors.yellow;
-            if (menuIndex == 2) {
-              if (c['severidade'] == 'FATAL')
-                corPonto = Colors.red;
-              else if (c['severidade'] == 'GRAVE') corPonto = Colors.orange;
+            Color corPonto;
+
+            if (menuIndex == 2) { 
+              // ESTAMOS NA ABA ACIDENTES
+              // Vamos pintar de ROXO se for LEVE, para provar que é diferente de Celular
+              String sev = c['severidade'] ?? 'N/A';
+              
+              if (sev == 'FATAL') corPonto = Colors.red;
+              else if (sev == 'GRAVE') corPonto = Colors.orange;
+              else corPonto = Colors.purpleAccent; // <--- MUDANÇA AQUI: LEVE vira ROXO
+              
+              // Print de Debug no Console do Flutter (veja no terminal "Run")
+              print("ACIDENTE ENCONTRADO: Lat: $l, Lon: $ln, Sev: $sev");
+
             } else {
-              corPonto =
-                  (c['quantidade'] ?? 1) > 10 ? Colors.red : Colors.yellow;
+              // Celulares e Veículos continuam Amarelos/Vermelhos por quantidade
+              corPonto = (c['quantidade'] ?? 1) > 10 ? Colors.red : Colors.yellow;
             }
 
             return Marker(
