@@ -2,11 +2,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from google.cloud import bigquery
 import uvicorn
-# NÃO IMPORTAMOS MAIS PANDAS NEM NUMPY
+import pandas as pd
+import numpy as np
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# CLIENTE PADRÃO (US) - Como mostra sua imagem!
 client = bigquery.Client(project='zecchin-analytica')
 
 CONFIG = {
@@ -36,6 +38,10 @@ CONFIG = {
     }
 }
 
+def sanitizar_dataframe(df):
+    df = df.replace({np.nan: None})
+    return df.to_dict(orient="records")
+
 @app.get("/crimes")
 def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
     if tipo_crime not in CONFIG: return {"data": []}
@@ -63,6 +69,8 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
                 ELSE 'LEVE' 
             END as severidade"""
 
+    # --- AQUI ESTAVA O ERRO! ---
+    # Removi o espaço dentro da crase: `{cfg['tabela']}` t
     query = f"""
         SELECT 
             {lat_f} as lat, 
@@ -70,7 +78,7 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
             {cfg['col_marca']} as tipo, 
             1 as quantidade 
             {extra_campos}
-        FROM `{cfg['tabela']} ` t
+        FROM `{cfg['tabela']}` t
         WHERE {lat_f} IS NOT NULL 
           AND {lon_f} IS NOT NULL
           AND {cond_ano}
@@ -79,14 +87,8 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
     """
     
     try:
-        # MODO NATIVO (Sem Pandas)
-        query_job = client.query(query)
-        results = []
-        for row in query_job:
-            # Converte a linha do BigQuery direto para Dict
-            results.append(dict(row))
-            
-        return {"data": results}
+        df = client.query(query).to_dataframe()
+        return {"data": sanitizar_dataframe(df)}
     except Exception as e:
         print(f"Erro Query Crimes: {e}")
         return {"data": [], "error": str(e)}
@@ -156,12 +158,14 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
         """
 
     try:
-        # MODO NATIVO BLINDADO (Sem Pandas)
         query_job = client.query(query)
         results = []
         for row in query_job:
-            # Transforma a linha em dicionário Python puro
             item = dict(row)
+            if 'lista_veiculos' in item and item['lista_veiculos']:
+                item['lista_veiculos'] = [dict(v) for v in item['lista_veiculos']]
+            if 'lista_pessoas' in item and item['lista_pessoas']:
+                item['lista_pessoas'] = [dict(p) for p in item['lista_pessoas']]
             results.append(item)
             
         return {"data": results}
