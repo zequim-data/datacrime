@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart'; // <--- IMPORTANTE: NOVA LIB
 import 'dart:convert';
 
 void main() => runApp(const MaterialApp(
@@ -43,11 +44,43 @@ class _MapScreenState extends State<MapScreen> {
     return "acidente";
   }
 
-  // Cores Dinâmicas (O que você gostou!)
+  // Cores Dinâmicas
   Color get themeColor {
-    if (menuIndex == 0) return Colors.cyanAccent; // Celular
-    if (menuIndex == 1) return Colors.greenAccent; // Veículo
-    return Colors.orangeAccent; // Acidente
+    if (menuIndex == 0) return Colors.cyanAccent;
+    if (menuIndex == 1) return Colors.greenAccent;
+    return Colors.orangeAccent;
+  }
+
+  // --- NOVA FUNÇÃO: BUSCAR ENDEREÇO (GEOCODING) ---
+  Future<void> _buscarPorTexto(String endereco) async {
+    if (endereco.isEmpty) return;
+    
+    setState(() => carregando = true);
+    FocusScope.of(context).unfocus(); // Esconde o teclado
+
+    try {
+      // Tenta achar o endereço
+      List<Location> locations = await locationFromAddress(endereco);
+      
+      if (locations.isNotEmpty) {
+        Location loc = locations.first;
+        LatLng destino = LatLng(loc.latitude, loc.longitude);
+
+        // Move a câmera
+        final GoogleMapController controller = await _controller.future;
+        controller.animateCamera(CameraUpdate.newLatLngZoom(destino, 16));
+
+        // Já faz a busca de crimes no local encontrado
+        buscarCrimes(destino);
+      } else {
+        _snack("Endereço não encontrado.");
+      }
+    } catch (e) {
+      print("Erro Geocoding: $e");
+      _snack("Endereço não localizado. Tente ser mais específico (ex: Rua X, Cidade).");
+    } finally {
+      setState(() => carregando = false);
+    }
   }
 
   void _atualizarCirculo() {
@@ -58,7 +91,7 @@ class _MapScreenState extends State<MapScreen> {
           circleId: const CircleId("raio_analise"),
           center: pontoSelecionado!,
           radius: raioBusca,
-          fillColor: themeColor.withOpacity(0.15), // Cor do tema bem suave
+          fillColor: themeColor.withOpacity(0.15),
           strokeColor: themeColor,
           strokeWidth: 2,
         )
@@ -66,30 +99,30 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
-  // --- 1. GERADOR DE BOLINHAS (AGORA PEQUENAS: 40px) ---
+  // --- 1. GERADOR DE BOLINHAS (TAMANHO EXTRA PEQUENO: 25px) ---
   Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
     final Paint paint = Paint()..color = cor.withOpacity(0.9);
     
-    // TAMANHO REDUZIDO
-    final int size = 40; 
+    // --- REDUÇÃO FINAL DE TAMANHO ---
+    final int size = 25; // Pequeno e discreto
 
     // Círculo Fundo
     canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, paint);
     
-    // Borda
+    // Borda Fina
     Paint borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2; 
+      ..strokeWidth = 1.0; 
     canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, borderPaint);
 
-    // Texto
+    // Texto (Fonte menor)
     TextPainter painter = TextPainter(textDirection: TextDirection.ltr);
     painter.text = TextSpan(
       text: texto,
-      style: TextStyle(fontSize: 13, color: Colors.black, fontWeight: FontWeight.bold), // Fonte preta pra ler melhor no colorido
+      style: TextStyle(fontSize: 10, color: Colors.black, fontWeight: FontWeight.bold),
     );
     painter.layout();
     painter.paint(canvas, Offset((size - painter.width) / 2, (size - painter.height) / 2));
@@ -187,7 +220,7 @@ class _MapScreenState extends State<MapScreen> {
   void _exibirGavetaDetalhes(List<dynamic> lista) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.black.withOpacity(0.9), // Fundo Preto Hacker
+      backgroundColor: Colors.black.withOpacity(0.9),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
@@ -213,7 +246,7 @@ class _MapScreenState extends State<MapScreen> {
                 final c = lista[i];
                 bool isAcidente = menuIndex == 2; 
                 return Card(
-                  color: Colors.white.withOpacity(0.08), // Card semitransparente
+                  color: Colors.white.withOpacity(0.08),
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   child: ExpansionTile(
                     iconColor: themeColor,
@@ -292,14 +325,14 @@ class _MapScreenState extends State<MapScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white, // Fundo do App Branco (Mapa Claro)
+      backgroundColor: Colors.white,
       
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: menuIndex,
-        backgroundColor: Colors.black, // BARRA PRETA
-        selectedItemColor: themeColor, // Cores Vivas
+        backgroundColor: Colors.black, 
+        selectedItemColor: themeColor, 
         unselectedItemColor: Colors.white30,
-        type: BottomNavigationBarType.fixed, // Fixa para não pular
+        type: BottomNavigationBarType.fixed,
         onTap: (i) {
           setState(() { 
             menuIndex = i; 
@@ -318,7 +351,7 @@ class _MapScreenState extends State<MapScreen> {
 
       body: Stack(children: [
         
-        // CAMADA 1: O MAPA CLARO (Padrão)
+        // CAMADA 1: O MAPA CLARO
         GoogleMap(
           mapType: MapType.normal,
           initialCameraPosition: const CameraPosition(
@@ -336,21 +369,23 @@ class _MapScreenState extends State<MapScreen> {
           onTap: (pos) => buscarCrimes(pos),
         ),
         
-        // CAMADA 2: BARRA DE BUSCA (Preta/Transparente)
+        // CAMADA 2: BARRA DE BUSCA (COM GEOCODING CONECTADO)
         Positioned(
           top: 50, left: 15, right: 15,
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.85), // Fundo Hacker
+              color: Colors.black.withOpacity(0.85),
               borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: themeColor.withOpacity(0.5)), // Borda Colorida
+              border: Border.all(color: themeColor.withOpacity(0.5)),
               boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)]
             ),
             child: TextField(
               controller: _searchController,
+              onSubmitted: (value) => _buscarPorTexto(value), // <--- AQUI É A MÁGICA
+              textInputAction: TextInputAction.search,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                  hintText: "Toque no mapa para buscar...",
+                  hintText: "Digite endereço ou CEP...", // Texto corrigido
                   hintStyle: TextStyle(color: Colors.white38, fontSize: 13),
                   prefixIcon: Icon(Icons.search, color: themeColor),
                   border: InputBorder.none,
@@ -359,10 +394,9 @@ class _MapScreenState extends State<MapScreen> {
           )
         ),
 
-        // CAMADA 3: CONTROLES (Slider + Anos)
+        // CAMADA 3: CONTROLES
         Positioned(
           top: 120, left: 15, right: 15,
-          // GestureDetector impede que arrastar o slider mova o mapa
           child: GestureDetector(
             onVerticalDragUpdate: (_) {}, 
             child: Column(children: [
