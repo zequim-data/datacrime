@@ -1,0 +1,18 @@
+name: latlong2
+description: Lightweight library for common latitude and longitude calculation
+homepage: https://github.com/jifalops/dart-latlong
+
+version: 0.9.1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  intl: '>=0.15.0 <1.0.0'
+
+dev_dependencies:
+  test: any
+  lints: any
+  build_runner: any
+  build_test: any
+  build_web_compilers: any

@@ -1,0 +1,25 @@
+name: datacrime
+description: "Projeto Zecchin Analytica - Monitoramento de Crimes"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # LISTA DE PACOTES (Ficam aqui embaixo de flutter: sdk: flutter)
+  flutter_map: ^8.2.0
+  latlong2: ^0.9.1
+  http: ^1.2.0
+  geolocator: ^13.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+# GAVETA DO FLUTTER (Fica separada das dependencies)
+flutter:
+  uses-material-design: true

@@ -1,0 +1,22 @@
+# Python (Dentro da pasta backend)
+backend/venv/
+backend/__pycache__/
+*.pyc
+
+# Flutter (Arquivos na raiz do projeto)
+.dart_tool/
+build/          <-- Corrigido (removi o ponto)
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+
+# IDE e Configurações
+.vscode/*
+!.vscode/launch.json
+
+# Segurança Crítica
+# Isso garante que sua chave do BigQuery não vaze no GitHub público!
+*.json
+!.vscode/launch.json
