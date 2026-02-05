@@ -1,4 +1,4 @@
-# --- Ocultar coisas do Flutter (para forçar o modo Python) ---
+# --- Ocultar coisas do Flutter ---
 .dart_tool/
 .idea/
 android/
@@ -14,12 +14,13 @@ pubspec.yaml
 pubspec.lock
 analysis_options.yaml
 
-# --- Ocultar coisas do Git e GitHub ---
+# --- Ocultar coisas do Git ---
 .git/
 .github/
 .gitignore
 
-# --- Manter apenas o Backend Python ---
+# --- O QUE VAI SUBIR (Whitelist) ---
 !main.py
 !requirements.txt
 !.python-version
+!Dockerfile 
