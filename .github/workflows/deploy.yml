@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  # --- TRILHA 1: FRONTEND (FLUTTER -> FIREBASE) ---
+  # --- TRILHA 1: FRONTEND (Mantém igual) ---
   deploy_frontend:
     runs-on: ubuntu-latest
     steps:
@@ -29,26 +29,30 @@ jobs:
           sudo npm install -g firebase-tools
           firebase deploy --only hosting --token ${{ secrets.FIREBASE_TOKEN }}
 
-  # --- TRILHA 2: BACKEND (PYTHON -> CLOUD RUN) ---
+  # --- TRILHA 2: BACKEND (O Pulo do Gato) ---
   deploy_backend:
     runs-on: ubuntu-latest
-    needs: [] # #Roda em paralelo com o frontend (não precisa esperar)
+    needs: []
     steps:
       - name: Baixar Código
         uses: actions/checkout@v4
 
+      # 1. Autentica (Isso gera o arquivo de credenciais)
       - name: Autenticar no Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
+      # 2. Configura o CLI do gcloud (Instala a ferramenta)
       - name: Configurar Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
-
-      - name: Deploy no Cloud Run
-        uses: google-github-actions/deploy-cloudrun@v2
         with:
-          service: zecchin-api    # O nome exato do seu serviço no Cloud Run
-          region: southamerica-east1
-          source: .               # Envia a pasta atual (raiz)
           project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      # 3. COMANDO MANUAL (Aqui a gente manda na pasta!)
+      - name: Deploy Manual (Forçando pasta backend)
+        run: |
+          gcloud run deploy zecchin-api \
+            --source backend \
+            --region southamerica-east1 \
+            --quiet
