@@ -1,26 +1,9 @@
-# --- Ocultar coisas do Flutter ---
-.dart_tool/
-.idea/
-android/
-build/
-ios/
-lib/
-linux/
-macos/
-test/
-web/
-windows/
-pubspec.yaml
-pubspec.lock
-analysis_options.yaml
+# 1. Ignorar TUDO por padrão (O segredo é esse asterisco)
+*
 
-# --- Ocultar coisas do Git ---
-.git/
-.github/
-.gitignore
-
-# --- O QUE VAI SUBIR (Whitelist) ---
+# 2. Designorar (liberar) apenas o essencial
 !main.py
 !requirements.txt
 !.python-version
-!Dockerfile 
+!Dockerfile
+!.gcloudignore
