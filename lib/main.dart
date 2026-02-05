@@ -24,7 +24,7 @@ class _MapScreenState extends State<MapScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   // --- CONFIGURAÇÕES ---
-  // COLE SUA CHAVE AQUI PARA A BUSCA FUNCIONAR
+  //z COLE SUA CHAVE AQUI PARA A BUSCA FUNCIONAR
   final String googleApiKey = "AIzaSyDj2xClrlZVaLGs1H-m6XPNsLEhMbZ64Vw";
   final String baseUrl =
       "https://zecchin-api-997663776889.southamerica-east1.run.app";
