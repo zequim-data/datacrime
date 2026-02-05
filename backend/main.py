@@ -3,17 +3,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from google.cloud import bigquery
 import uvicorn
 
+# 1. Criação do App (Isso estava faltando no seu erro)
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# 2. Conexão com o Banco
 client = bigquery.Client(project='zecchin-analytica')
 
+# 3. Configuração das Tabelas
 CONFIG = {
     "celular": {
         "tabela": "zecchin-analytica.ssp_raw.raw_celulares_ssp",
         "col_marca": "marca_objeto",
         "col_data": "datahora_registro_bo",
-        "tipo_filtro_ano": "string_substr",
         "geo_col_lat": "latitude",
         "geo_col_lon": "longitude"
     },
@@ -21,7 +23,6 @@ CONFIG = {
         "tabela": "zecchin-analytica.ssp_raw.raw_veiculos_ssp",
         "col_marca": "descr_marca_veiculo",
         "col_data": "datahora_registro_bo",
-        "tipo_filtro_ano": "string_substr",
         "geo_col_lat": "latitude",
         "geo_col_lon": "longitude"
     },
@@ -30,7 +31,6 @@ CONFIG = {
         "col_marca": "tp_sinistro_primario",
         "col_data": "data_sinistro",
         "col_ano_num": "ano_sinistro",
-        "tipo_filtro_ano": "number_safe_cast", # Lógica que validamos
         "geo_col_lat": "latitude",
         "geo_col_lon": "longitude"
     }
@@ -39,33 +39,27 @@ CONFIG = {
 @app.get("/crimes")
 def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
     if tipo_crime not in CONFIG: return {"data": []}
-    
     cfg = CONFIG[tipo_crime]
     
-    # 1. LATITUDE/LONGITUDE (Validado: Troca vírgula por ponto)
+    # Tratamento de Coordenadas (String -> Float)
     lat_f = f"SAFE_CAST(REPLACE({cfg['geo_col_lat']}, ',', '.') AS FLOAT64)"
     lon_f = f"SAFE_CAST(REPLACE({cfg['geo_col_lon']}, ',', '.') AS FLOAT64)"
 
-    # 2. FILTRO DE ANO (Validado: Inteiro direto)
-    if cfg.get('tipo_filtro_ano') == "number_safe_cast":
+    # Filtro de Ano
+    if tipo_crime == "acidente":
+        # Infosiga usa ano numérico
         col_ano = f"SAFE_CAST({cfg['col_ano_num']} AS INT64)"
-        if filtro == "2025":
-            cond_ano = f"{col_ano} = 2025"
-        elif filtro == "3_anos":
-            cond_ano = f"{col_ano} >= 2023"
-        else:
-            cond_ano = f"{col_ano} >= 2021"
+        if filtro == "2025": cond_ano = f"{col_ano} = 2025"
+        elif filtro == "3_anos": cond_ano = f"{col_ano} >= 2023"
+        else: cond_ano = f"{col_ano} >= 2021"
     else:
-        # Lógica legado (SSP)
+        # SSP usa string
         data_sql = f"SUBSTR({cfg['col_data']}, 1, 4)"
-        if filtro == "2025":
-            cond_ano = f"{data_sql} = '2025'"
-        elif filtro == "3_anos":
-            cond_ano = f"{data_sql} >= '2023'"
-        else:
-            cond_ano = f"{data_sql} >= '2021'"
+        if filtro == "2025": cond_ano = f"{data_sql} = '2025'"
+        elif filtro == "3_anos": cond_ano = f"{data_sql} >= '2023'"
+        else: cond_ano = f"{data_sql} >= '2021'"
 
-    # 3. SEVERIDADE (Validado: Trata Nulos e Strings Numéricas)
+    # Campos Extras (Severidade)
     extra_campos = ""
     if tipo_crime == "acidente":
         extra_campos = """, 
@@ -94,7 +88,7 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
         df = client.query(query).to_dataframe()
         return {"data": df.to_dict(orient="records")}
     except Exception as e:
-        print(f"Erro Query: {e}")
+        print(f"Erro Query Crimes: {e}")
         return {"data": [], "error": str(e)}
 
 @app.get("/detalhes")
@@ -106,50 +100,46 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
     lon_f = f"SAFE_CAST(REPLACE({cfg['geo_col_lon']}, ',', '.') AS FLOAT64)"
 
     if tipo_crime == "acidente":
-        # QUERY AVANÇADA COM ARRAY_AGG e STRUCT
-        # Isso cria uma lista de objetos aninhados para cada acidente
-        
+        # QUERY COMPLEXA (Acidentes + Veículos + Pessoas)
         query = f"""
             SELECT 
                 t.tp_sinistro_primario as rubrica,
                 t.logradouro as local_texto,
                 t.{cfg['col_data']} as data,
                 
-                -- Severidade Geral
                 CASE 
                     WHEN COALESCE(SAFE_CAST(t.qtd_gravidade_fatal AS FLOAT64), 0) > 0 THEN 'FATAL' 
                     WHEN COALESCE(SAFE_CAST(t.qtd_gravidade_grave AS FLOAT64), 0) > 0 THEN 'GRAVE' 
                     ELSE 'LEVE' 
                 END as severidade,
 
-                -- Contadores
                 COALESCE(SAFE_CAST(t.qtd_automovel AS INT64), 0) as autos,
                 COALESCE(SAFE_CAST(t.qtd_motocicleta AS INT64), 0) as motos,
                 COALESCE(SAFE_CAST(t.qtd_pedestre AS INT64), 0) as pedestres,
 
-                -- LISTA ESTRUTURADA DE VEÍCULOS
+                -- Lista de Veículos (Blindada com CAST STRING)
                 ARRAY(
                     SELECT AS STRUCT 
                         v.marca_modelo as modelo,
                         v.cor_veiculo as cor,
-                        SAFE_CAST(v.ano_fab AS INT64) as ano_fab,
-                        SAFE_CAST(v.ano_modelo AS INT64) as ano_mod,
+                        CAST(SAFE_CAST(v.ano_fab AS FLOAT64) AS INT64) as ano_fab,
+                        CAST(SAFE_CAST(v.ano_modelo AS FLOAT64) AS INT64) as ano_mod,
                         v.tipo_veiculo as tipo
                     FROM `zecchin-analytica.infosiga_raw.raw_veiculos` v 
-                    WHERE v.id_sinistro = t.id_sinistro
+                    WHERE CAST(v.id_sinistro AS STRING) = CAST(t.id_sinistro AS STRING)
                 ) as lista_veiculos,
 
-                -- LISTA ESTRUTURADA DE PESSOAS
+                -- Lista de Pessoas (Blindada com CAST STRING)
                 ARRAY(
                     SELECT AS STRUCT 
-                        SAFE_CAST(p.idade AS INT64) as idade,
+                        CAST(SAFE_CAST(p.idade AS FLOAT64) AS INT64) as idade,
                         p.sexo,
                         p.gravidade_lesao as lesao,
                         p.tipo_de_vitima as tipo_vitima,
                         p.tipo_veiculo_vitima as veiculo_vitima,
                         p.profissao
                     FROM `zecchin-analytica.infosiga_raw.raw_pessoas` p 
-                    WHERE p.id_sinistro = t.id_sinistro
+                    WHERE CAST(p.id_sinistro AS STRING) = CAST(t.id_sinistro AS STRING)
                 ) as lista_pessoas
 
             FROM `{cfg['tabela']}` t
@@ -157,7 +147,7 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
             LIMIT 50
         """
     else:
-        # Lógica padrão (SSP)
+        # Lógica Simples (SSP)
         campos = ""
         if tipo_crime == "veiculo":
             campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica"
@@ -175,8 +165,8 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
         df = client.query(query).to_dataframe()
         return {"data": df.to_dict(orient="records")}
     except Exception as e:
-        print(f"Erro Detalhes: {e}")
-        return {"data": []}
-    
+        print(f"ERRO CRÍTICO NO GET_DETALHES: {e}")
+        return {"data": [], "error_debug": str(e)}
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
