@@ -75,6 +75,7 @@ class _MapScreenState extends State<MapScreen> {
         builder: (_, scroll) => Container(
           padding: const EdgeInsets.all(20),
           child: Column(children: [
+            // Barrinha de topo
             Container(
                 width: 40,
                 height: 5,
@@ -82,45 +83,118 @@ class _MapScreenState extends State<MapScreen> {
                     color: Colors.white24,
                     borderRadius: BorderRadius.circular(10))),
             const SizedBox(height: 15),
-            Text("${lista.length} OCORRÊNCIAS NESTE PONTO",
+
+            // Título do Drawer
+            Text("${lista.length} REGISTROS NESTE LOCAL",
                 style: const TextStyle(
                     color: Colors.amber,
                     fontWeight: FontWeight.bold,
                     fontSize: 16)),
             const Divider(color: Colors.amber, height: 25),
+
+            // Lista de Cards
             Expanded(
                 child: ListView.builder(
               controller: scroll,
               itemCount: lista.length,
               itemBuilder: (context, i) {
                 final c = lista[i];
+
+                // --- LÓGICA VISUAL DIFERENCIADA ---
+                bool isAcidente = menuIndex == 2;
+
+                // Definição de Cores para Severidade
+                Color corTitulo = Colors.cyan;
+                String severidade = "";
+                if (isAcidente) {
+                  severidade = c['severidade'] ?? 'LEVE';
+                  if (severidade == 'FATAL')
+                    corTitulo = Colors.redAccent;
+                  else if (severidade == 'GRAVE')
+                    corTitulo = Colors.orangeAccent;
+                  else
+                    corTitulo = Colors.purpleAccent; // Roxo para leve
+                }
+
                 return Card(
                   color: Colors.white.withOpacity(0.05),
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   child: ExpansionTile(
-                    iconColor: Colors.cyan,
-                    collapsedIconColor: Colors.white,
+                    iconColor: corTitulo,
+                    collapsedIconColor: Colors.white54,
+                    // TÍTULO: Agora mostra o TIPO (ex: Atropelamento) ou RUBRICA (ex: Roubo)
                     title: Text("${c['rubrica'] ?? 'OCORRÊNCIA'}",
-                        style: const TextStyle(
-                            color: Colors.cyan,
+                        style: TextStyle(
+                            color: corTitulo,
                             fontWeight: FontWeight.bold,
                             fontSize: 14)),
-                    subtitle: Text("${c['data'] ?? 'DATA N/I'}",
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 11)),
+
+                    // SUBTÍTULO: Data e Severidade (se for acidente)
+                    subtitle: Row(
+                      children: [
+                        Text("${c['data'] ?? 'DATA N/I'}",
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 11)),
+                        if (isAcidente) ...[
+                          const SizedBox(width: 10),
+                          Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                  color: corTitulo.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                      color: corTitulo.withOpacity(0.5))),
+                              child: Text(severidade,
+                                  style: TextStyle(
+                                      color: corTitulo,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold)))
+                        ]
+                      ],
+                    ),
                     children: [
                       Padding(
                         padding: const EdgeInsets.all(15),
                         child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _itemInfo("Marca/Tipo:", c['marca']),
-                              // RESTAURADO: Detalhes específicos de Veículos SSP
-                              if (menuIndex == 1) ...[
-                                _itemInfo("Placa:", c['placa']),
-                                _itemInfo("Cor:", c['cor']),
-                              ],
-                              _itemInfo("Localização:", c['local'] ?? "N/I"),
+                              // SE FOR ACIDENTE: MOSTRA OS ÍCONES DOS ENVOLVIDOS
+                              if (isAcidente) ...[
+                                const Text("Veículos e Pessoas Envolvidas:",
+                                    style: TextStyle(
+                                        color: Colors.white54, fontSize: 12)),
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceAround,
+                                  children: [
+                                    _iconStat(Icons.directions_car, c['autos'],
+                                        "Carros"),
+                                    _iconStat(
+                                        Icons.two_wheeler, c['motos'], "Motos"),
+                                    _iconStat(Icons.directions_walk,
+                                        c['pedestres'], "Pedestres"),
+                                    _iconStat(Icons.directions_bus, c['onibus'],
+                                        "Ônibus"),
+                                  ],
+                                ),
+                                const Divider(
+                                    color: Colors.white24, height: 20),
+                                _itemInfo("Local:", c['local_texto']),
+                              ]
+
+                              // SE FOR OUTROS CRIMES (SSP)
+                              else ...[
+                                _itemInfo("Marca/Objeto:", c['marca']),
+                                if (menuIndex == 1) ...[
+                                  // Veículos SSP
+                                  _itemInfo("Placa:", c['placa']),
+                                  _itemInfo("Cor:", c['cor']),
+                                ],
+                                _itemInfo(
+                                    "Endereço:", c['local_texto'] ?? "N/I"),
+                              ]
                             ]),
                       )
                     ],
@@ -132,6 +206,26 @@ class _MapScreenState extends State<MapScreen> {
         ),
       ),
     );
+  }
+
+  // Widget auxiliar para desenhar os ícones de estatística (Carro: 1, Moto: 0...)
+  Widget _iconStat(IconData icon, dynamic count, String label) {
+    int val = 0;
+    if (count is int)
+      val = count;
+    else if (count is double) val = count.toInt();
+
+    // Se for zero, deixa o ícone bem apagadinho
+    Color color = val > 0 ? Colors.white : Colors.white24;
+
+    return Column(children: [
+      Icon(icon, color: color, size: 24),
+      const SizedBox(height: 4),
+      Text(val.toString(),
+          style: TextStyle(
+              color: color, fontWeight: FontWeight.bold, fontSize: 14)),
+      Text(label, style: TextStyle(color: color.withOpacity(0.5), fontSize: 9)),
+    ]);
   }
 
   Widget _itemInfo(String label, String? v) => Padding(
@@ -187,21 +281,25 @@ class _MapScreenState extends State<MapScreen> {
             // CORES REFINADAS (ACIDENTES VS OUTROS)
             Color corPonto;
 
-            if (menuIndex == 2) { 
+            if (menuIndex == 2) {
               // ESTAMOS NA ABA ACIDENTES
               // Vamos pintar de ROXO se for LEVE, para provar que é diferente de Celular
               String sev = c['severidade'] ?? 'N/A';
-              
-              if (sev == 'FATAL') corPonto = Colors.red;
-              else if (sev == 'GRAVE') corPonto = Colors.orange;
-              else corPonto = Colors.purpleAccent; // <--- MUDANÇA AQUI: LEVE vira ROXO
-              
+
+              if (sev == 'FATAL')
+                corPonto = Colors.red;
+              else if (sev == 'GRAVE')
+                corPonto = Colors.orange;
+              else
+                corPonto =
+                    Colors.purpleAccent; // <--- MUDANÇA AQUI: LEVE vira ROXO
+
               // Print de Debug no Console do Flutter (veja no terminal "Run")
               print("ACIDENTE ENCONTRADO: Lat: $l, Lon: $ln, Sev: $sev");
-
             } else {
               // Celulares e Veículos continuam Amarelos/Vermelhos por quantidade
-              corPonto = (c['quantidade'] ?? 1) > 10 ? Colors.red : Colors.yellow;
+              corPonto =
+                  (c['quantidade'] ?? 1) > 10 ? Colors.red : Colors.yellow;
             }
 
             return Marker(

@@ -105,26 +105,54 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
     lat_f = f"SAFE_CAST(REPLACE({cfg['geo_col_lat']}, ',', '.') AS FLOAT64)"
     lon_f = f"SAFE_CAST(REPLACE({cfg['geo_col_lon']}, ',', '.') AS FLOAT64)"
 
-    campos = ""
-    if tipo_crime == "veiculo":
-        campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica"
-    elif tipo_crime == "celular":
-        campos = f"{cfg['col_marca']} as marca, rubrica"
-    else: 
-        # Acidente
-        campos = f"{cfg['col_marca']} as marca, logradouro as rubrica"
-    
-    query = f"""
-        SELECT {campos}, {cfg['col_data']} as data, 'Localização' as local
-        FROM `{cfg['tabela']}`
-        WHERE {lat_f} = {lat} AND {lon_f} = {lon}
-        LIMIT 50
-    """
+    # Lógica customizada para trazer campos ricos do INFOSIGA
+    if tipo_crime == "acidente":
+        query = f"""
+            SELECT 
+                {cfg['col_marca']} as rubrica, -- Título Principal (ex: COLISÃO, ATROPELAMENTO)
+                logradouro as local_texto,     -- Subtítulo (Endereço)
+                {cfg['col_data']} as data,
+                
+                -- Severidade (para exibir GRANDE e colorido)
+                CASE 
+                    WHEN COALESCE(SAFE_CAST(qtd_gravidade_fatal AS FLOAT64), 0) > 0 THEN 'FATAL' 
+                    WHEN COALESCE(SAFE_CAST(qtd_gravidade_grave AS FLOAT64), 0) > 0 THEN 'GRAVE' 
+                    ELSE 'LEVE' 
+                END as severidade,
+
+                -- Contagem de Envolvidos (para ícones)
+                COALESCE(SAFE_CAST(qtd_automovel AS INT64), 0) as autos,
+                COALESCE(SAFE_CAST(qtd_motocicleta AS INT64), 0) as motos,
+                COALESCE(SAFE_CAST(qtd_pedestre AS INT64), 0) as pedestres,
+                COALESCE(SAFE_CAST(qtd_onibus AS INT64), 0) as onibus,
+                COALESCE(SAFE_CAST(qtd_caminhao AS INT64), 0) as caminhoes,
+                COALESCE(SAFE_CAST(qtd_bicicleta AS INT64), 0) as bikes
+
+            FROM `{cfg['tabela']}`
+            WHERE {lat_f} = {lat} AND {lon_f} = {lon}
+            LIMIT 50
+        """
+    else:
+        # Lógica padrão para Celulares e Veículos (SSP)
+        campos = ""
+        if tipo_crime == "veiculo":
+            campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica"
+        else: # celular
+            campos = f"{cfg['col_marca']} as marca, rubrica"
+
+        query = f"""
+            SELECT {campos}, {cfg['col_data']} as data, 'Localização' as local_texto
+            FROM `{cfg['tabela']}`
+            WHERE {lat_f} = {lat} AND {lon_f} = {lon}
+            LIMIT 50
+        """
+
     try:
         df = client.query(query).to_dataframe()
         return {"data": df.to_dict(orient="records")}
     except Exception as e:
+        print(f"Erro Detalhes: {e}")
         return {"data": []}
-
+    
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
