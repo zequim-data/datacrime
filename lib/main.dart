@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
 import 'dart:convert';
 
 void main() => runApp(const MaterialApp(
@@ -24,19 +23,23 @@ class _MapScreenState extends State<MapScreen> {
   final Completer<GoogleMapController> _controller = Completer();
   final TextEditingController _searchController = TextEditingController();
 
-  // --- ESTADOS DO APP ---
+  // --- CONFIGURAÇÕES ---
+  // COLE SUA CHAVE AQUI PARA A BUSCA FUNCIONAR
+  final String googleApiKey = "AIzaSyDj2xClrlZVaLGs1H-m6XPNsLEhMbZ64Vw";
+  final String baseUrl =
+      "https://zecchin-api-997663776889.southamerica-east1.run.app";
+
+  // --- ESTADOS ---
   Set<Marker> _markers = {};
   Set<Circle> _circles = {};
-  LatLng? pontoSelecionado;
-  
+  LatLng? pontoSelecionado; // Agora isso é sagrado, não limpamos à toa!
+
   double raioBusca = 300.0;
   String filtroAno = "2025";
-  int menuIndex = 0; // 0=Celular, 1=Veículo, 2=Acidente
-  
+  int menuIndex = 0;
+
   Map<String, int> estatisticasMarcas = {};
   bool carregando = false;
-
-  final String baseUrl = "https://zecchin-api-997663776889.southamerica-east1.run.app";
 
   String get tipoCrimeParam {
     if (menuIndex == 0) return "celular";
@@ -44,39 +47,37 @@ class _MapScreenState extends State<MapScreen> {
     return "acidente";
   }
 
-  // Cores Dinâmicas
-  Color get themeColor {
-    if (menuIndex == 0) return Colors.cyanAccent;
-    if (menuIndex == 1) return Colors.greenAccent;
-    return Colors.orangeAccent;
-  }
+  Color get themeColor => Colors.deepOrangeAccent; // Laranja Unificado
 
-  // --- BUSCA ENDEREÇO (GEOCODING) ---
+  // --- BUSCA DE ENDEREÇO (MÉTODO HTTP DIRETO) ---
   Future<void> _buscarPorTexto(String endereco) async {
     if (endereco.isEmpty) return;
-    
     setState(() => carregando = true);
-    FocusScope.of(context).unfocus(); 
+
+    // URL Direta do Google Geocoding API (Mais confiável para Web)
+    final url = Uri.parse(
+        "https://maps.googleapis.com/maps/api/geocode/json?address=$endereco&key=$googleApiKey");
 
     try {
-      // Busca o endereço
-      List<Location> locations = await locationFromAddress(endereco);
-      
-      if (locations.isNotEmpty) {
-        Location loc = locations.first;
-        LatLng destino = LatLng(loc.latitude, loc.longitude);
+      final response = await http.get(url);
+      final data = json.decode(response.body);
+
+      if (data['status'] == 'OK') {
+        final location = data['results'][0]['geometry']['location'];
+        final lat = location['lat'];
+        final lng = location['lng'];
+        final destino = LatLng(lat, lng);
 
         final GoogleMapController controller = await _controller.future;
         controller.animateCamera(CameraUpdate.newLatLngZoom(destino, 16));
 
-        // Busca crimes no local
+        // Já busca crimes no local encontrado
         buscarCrimes(destino);
       } else {
-        _snack("Endereço não encontrado.");
+        _snack("Endereço não encontrado. (Status: ${data['status']})");
       }
     } catch (e) {
-      print("Erro Geocoding: $e");
-      _snack("Erro na busca. Verifique se a 'Geocoding API' está ativada no Google Cloud.");
+      _snack("Erro na busca: $e");
     } finally {
       setState(() => carregando = false);
     }
@@ -90,48 +91,50 @@ class _MapScreenState extends State<MapScreen> {
           circleId: const CircleId("raio_analise"),
           center: pontoSelecionado!,
           radius: raioBusca,
-          fillColor: themeColor.withOpacity(0.15),
-          strokeColor: themeColor,
+          fillColor: Colors.red.withOpacity(0.15), // Vermelho sempre
+          strokeColor: Colors.red,
           strokeWidth: 2,
         )
       };
     });
   }
 
-  // --- GERADOR DE BOLINHAS (TAMANHO 25) ---
-  Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
+  // --- GERADOR DE MARCADORES ---
+  Future<BitmapDescriptor> _criarIconeCustomizado(
+      String texto, Color cor) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
     final Paint paint = Paint()..color = cor.withOpacity(0.9);
-    
-    final int size = 25; 
+    final int size = 25;
 
-    // Círculo
     canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, paint);
-    
-    // Borda
+
     Paint borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0; 
+      ..strokeWidth = 1.5;
     canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, borderPaint);
 
-    // Texto
-    TextPainter painter = TextPainter(textDirection: TextDirection.ltr);
-    painter.text = TextSpan(
-      text: texto,
-      style: TextStyle(fontSize: 10, color: Colors.black, fontWeight: FontWeight.bold),
-    );
-    painter.layout();
-    painter.paint(canvas, Offset((size - painter.width) / 2, (size - painter.height) / 2));
+    if (texto != "1") {
+      TextPainter painter = TextPainter(textDirection: TextDirection.ltr);
+      painter.text = TextSpan(
+          text: texto,
+          style: const TextStyle(
+              fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold));
+      painter.layout();
+      painter.paint(canvas,
+          Offset((size - painter.width) / 2, (size - painter.height) / 2));
+    }
 
-    final ui.Image img = await pictureRecorder.endRecording().toImage(size, size);
+    final ui.Image img =
+        await pictureRecorder.endRecording().toImage(size, size);
     final ByteData? data = await img.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.fromBytes(data!.buffer.asUint8List());
   }
 
-  // --- BUSCAR DADOS ---
+  // --- BUSCAR DADOS (CORE) ---
   Future<void> buscarCrimes(LatLng pos) async {
+    // Atualiza estado visual, mas NÃO limpa markers antigos ainda pra não piscar
     setState(() {
       pontoSelecionado = pos;
       carregando = true;
@@ -141,60 +144,60 @@ class _MapScreenState extends State<MapScreen> {
     try {
       final url = Uri.parse(
           '$baseUrl/crimes?lat=${pos.latitude}&lon=${pos.longitude}&raio=${raioBusca.toInt()}&filtro=$filtroAno&tipo_crime=$tipoCrimeParam');
-      
+
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = json.decode(response.body);
         final List<dynamic> crimes = responseData['data'] ?? [];
-        
+
+        // Se a lista vier vazia, avisa o usuário
+        if (crimes.isEmpty) {
+          _snack("Nenhum registro encontrado neste período/local.");
+        }
+
         Map<String, int> counts = {};
         Set<Marker> newMarkers = {};
 
         for (var c in crimes) {
-            final l = double.parse(c['lat'].toString());
-            final ln = double.parse(c['lon'].toString());
-            
-            String tipo = (c['tipo'] ?? 'N/I').toString().toUpperCase();
-            counts[tipo] = (counts[tipo] ?? 0) + 1;
+          final l = double.parse(c['lat'].toString());
+          final ln = double.parse(c['lon'].toString());
 
-            Color corMarker = themeColor; 
-            int qtd = c['quantidade'] ?? 1;
-            String textoLabel = "$qtd"; 
+          String tipo = (c['tipo'] ?? 'N/I').toString().toUpperCase();
+          counts[tipo] = (counts[tipo] ?? 0) + 1;
 
-            if (menuIndex == 2) { // Acidente
-              String sev = c['severidade'] ?? 'LEVE';
-              if (sev == 'FATAL') corMarker = Colors.red;
-              else if (sev == 'GRAVE') corMarker = Colors.orange;
-              else corMarker = Colors.yellow; 
-            } else { // Crimes
-               if (qtd > 10) corMarker = Colors.red;
-               else if (qtd > 5) corMarker = Colors.orange;
-            }
+          Color corMarker = themeColor;
+          // Destaque para Fatal apenas em Acidentes
+          if (menuIndex == 2) {
+            String sev = c['severidade'] ?? 'LEVE';
+            if (sev == 'FATAL') corMarker = Colors.red[900]!;
+          }
 
-            BitmapDescriptor icon = await _criarIconeCustomizado(textoLabel, corMarker);
+          int qtd = c['quantidade'] ?? 1;
+          BitmapDescriptor icon =
+              await _criarIconeCustomizado("$qtd", corMarker);
 
-            newMarkers.add(Marker(
-              markerId: MarkerId("${c['lat']}_${c['lon']}"),
-              position: LatLng(l, ln),
-              icon: icon,
-              onTap: () => buscarDetalhesPonto(LatLng(l, ln)),
-            ));
+          newMarkers.add(Marker(
+            markerId: MarkerId("${c['lat']}_${c['lon']}"),
+            position: LatLng(l, ln),
+            icon: icon,
+            onTap: () => buscarDetalhesPonto(LatLng(l, ln)),
+          ));
         }
 
+        // Só troca os marcadores se a requisição foi sucesso
         setState(() {
           _markers = newMarkers;
           estatisticasMarcas = counts;
         });
       }
     } catch (e) {
-      _snack("Erro de conexão.");
+      _snack("Erro de conexão com o servidor.");
     } finally {
       setState(() => carregando = false);
     }
   }
 
-  // --- BUSCAR DETALHES ---
   Future<void> buscarDetalhesPonto(LatLng pos) async {
     setState(() => carregando = true);
     final url = Uri.parse(
@@ -214,7 +217,7 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  // --- GAVETA DE DETALHES COMPLETA ---
+  // --- UI GAVETA ---
   void _exibirGavetaDetalhes(List<dynamic> lista) {
     showModalBottomSheet(
       context: context,
@@ -223,74 +226,105 @@ class _MapScreenState extends State<MapScreen> {
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
       builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6, 
+        initialChildSize: 0.6,
         maxChildSize: 0.95,
         minChildSize: 0.4,
         expand: false,
         builder: (_, scroll) => Container(
           padding: const EdgeInsets.all(20),
           child: Column(children: [
-            Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10))),
+            Container(
+                width: 40,
+                height: 5,
+                decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(10))),
             const SizedBox(height: 15),
-            
-            Text("${lista.length} REGISTROS ENCONTRADOS", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 16)),
+            Text("${lista.length} REGISTROS",
+                style: TextStyle(
+                    color: themeColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16)),
             Divider(color: themeColor, height: 25),
-
             Expanded(
                 child: ListView.builder(
               controller: scroll,
               itemCount: lista.length,
               itemBuilder: (context, i) {
                 final c = lista[i];
-                bool isAcidente = menuIndex == 2; 
-
+                bool isAcidente = menuIndex == 2;
                 return Card(
                   color: Colors.white.withOpacity(0.08),
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   child: ExpansionTile(
                     iconColor: themeColor,
                     collapsedIconColor: Colors.white54,
-                    title: Text("${c['rubrica'] ?? 'OCORRÊNCIA'}", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 14)),
-                    subtitle: Text("${c['data'] ?? ''}", style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                    title: Text("${c['rubrica'] ?? 'OCORRÊNCIA'}",
+                        style: TextStyle(
+                            color: themeColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14)),
+                    subtitle: Text("${c['data'] ?? ''}",
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 11)),
                     children: [
                       Padding(
                         padding: const EdgeInsets.all(15),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          if (isAcidente) ...[
-                             // Ícones de Estatística
-                             Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                                 _iconStat(Icons.directions_car, c['autos'], "Carros"),
-                                 _iconStat(Icons.two_wheeler, c['motos'], "Motos"),
-                                 _iconStat(Icons.directions_walk, c['pedestres'], "Pedestres"),
-                             ]),
-                             const SizedBox(height: 15),
-                             
-                             // --- AQUI VOLTARAM OS DETALHES DOS VEÍCULOS ---
-                             if (c['lista_veiculos'] != null && (c['lista_veiculos'] as List).isNotEmpty) ...[
-                               Text("VEÍCULOS:", style: TextStyle(color: themeColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                               const SizedBox(height: 5),
-                               ... (c['lista_veiculos'] as List).map((v) => _cardVeiculo(v)).toList(),
-                               const SizedBox(height: 15),
-                             ],
-                             
-                             // --- AQUI VOLTARAM AS VÍTIMAS ---
-                             if (c['lista_pessoas'] != null && (c['lista_pessoas'] as List).isNotEmpty) ...[
-                               Text("VÍTIMAS / ENVOLVIDOS:", style: TextStyle(color: themeColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                               const SizedBox(height: 5),
-                               ... (c['lista_pessoas'] as List).map((p) => _cardPessoa(p)).toList(),
-                             ],
-
-                             const Divider(color: Colors.white24, height: 20),
-                             _itemInfo("Local:", c['local_texto']),
-                          ] else ...[
-                              _itemInfo("Marca:", c['marca']),
-                              if (menuIndex == 1) ...[
-                                _itemInfo("Placa:", c['placa']),
-                                _itemInfo("Cor:", c['cor']),
-                              ],
-                              _itemInfo("Endereço:", c['local_texto']),
-                          ]
-                        ]),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (isAcidente) ...[
+                                Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceAround,
+                                    children: [
+                                      _iconStat(Icons.directions_car,
+                                          c['autos'], "Carros"),
+                                      _iconStat(Icons.two_wheeler, c['motos'],
+                                          "Motos"),
+                                      _iconStat(Icons.directions_walk,
+                                          c['pedestres'], "Pedestres"),
+                                    ]),
+                                const SizedBox(height: 15),
+                                if (c['lista_veiculos'] != null &&
+                                    (c['lista_veiculos'] as List)
+                                        .isNotEmpty) ...[
+                                  Text("VEÍCULOS:",
+                                      style: TextStyle(
+                                          color: themeColor,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 5),
+                                  ...(c['lista_veiculos'] as List)
+                                      .map((v) => _cardVeiculo(v))
+                                      .toList(),
+                                  const SizedBox(height: 15),
+                                ],
+                                if (c['lista_pessoas'] != null &&
+                                    (c['lista_pessoas'] as List)
+                                        .isNotEmpty) ...[
+                                  Text("VÍTIMAS:",
+                                      style: TextStyle(
+                                          color: themeColor,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 5),
+                                  ...(c['lista_pessoas'] as List)
+                                      .map((p) => _cardPessoa(p))
+                                      .toList(),
+                                ],
+                                const Divider(
+                                    color: Colors.white24, height: 20),
+                                _itemInfo("Local:", c['local_texto']),
+                              ] else ...[
+                                _itemInfo("Marca:", c['marca']),
+                                if (menuIndex == 1) ...[
+                                  _itemInfo("Placa:", c['placa']),
+                                  _itemInfo("Cor:", c['cor']),
+                                ],
+                                _itemInfo("Endereço:", c['local_texto']),
+                              ]
+                            ]),
                       )
                     ],
                   ),
@@ -303,76 +337,71 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  // --- WIDGETS AUXILIARES RESTAURADOS ---
   Widget _cardVeiculo(dynamic v) {
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white10,
-        borderRadius: BorderRadius.circular(5),
-        border: Border(left: BorderSide(color: themeColor.withOpacity(0.8), width: 3))
-      ),
+          color: Colors.white10,
+          borderRadius: BorderRadius.circular(5),
+          border: Border(left: BorderSide(color: themeColor, width: 3))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text("${v['modelo'] ?? 'Modelo N/I'}  (${v['ano_fab'] ?? '-'})", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-        Text("Cor: ${v['cor'] ?? '-'} • Tipo: ${v['tipo'] ?? '-'}", style: const TextStyle(color: Colors.white70, fontSize: 11)),
+        Text("${v['modelo'] ?? 'Modelo N/I'}",
+            style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 12)),
+        Text("Cor: ${v['cor'] ?? '-'} • Tipo: ${v['tipo'] ?? '-'}",
+            style: const TextStyle(color: Colors.white70, fontSize: 11)),
       ]),
     );
   }
 
   Widget _cardPessoa(dynamic p) {
-    Color corLesao = Colors.grey;
-    String lesao = (p['lesao'] ?? '').toString().toUpperCase();
-    if (lesao.contains("FATAL") || lesao.contains("MORTO")) corLesao = Colors.red;
-    else if (lesao.contains("GRAVE")) corLesao = Colors.orange;
-    else if (lesao.contains("LEVE")) corLesao = Colors.blue;
-
+    Color cor = Colors.blue;
+    String l = (p['lesao'] ?? '').toString().toUpperCase();
+    if (l.contains("FATAL") || l.contains("MORTO")) cor = Colors.red;
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white10,
-        borderRadius: BorderRadius.circular(5),
-        border: Border(left: BorderSide(color: corLesao, width: 3))
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.person, size: 16, color: corLesao),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text("${p['tipo_vitima'] ?? 'VÍTIMA'} • ${p['sexo'] ?? '?'} • ${p['idade'] != null ? '${p['idade']} anos' : '-'}", 
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-              Text("Lesão: ${p['lesao'] ?? 'N/I'}", style: const TextStyle(color: Colors.white70, fontSize: 11)),
-            ]),
-          )
-        ],
-      ),
+          color: Colors.white10,
+          borderRadius: BorderRadius.circular(5),
+          border: Border(left: BorderSide(color: cor, width: 3))),
+      child: Text(
+          "${p['tipo_vitima']} • ${p['sexo']} • ${p['idade'] ?? '-'} anos\n${p['lesao']}",
+          style: const TextStyle(color: Colors.white, fontSize: 11)),
     );
   }
 
   Widget _iconStat(IconData icon, dynamic count, String label) {
     int val = 0;
-    if (count is int) val = count;
+    if (count is int)
+      val = count;
     else if (count is double) val = count.toInt();
-    Color color = val > 0 ? Colors.white : Colors.white24;
     return Column(children: [
-        Icon(icon, color: color, size: 24),
-        Text(val.toString(), style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-        Text(label, style: TextStyle(color: color.withOpacity(0.5), fontSize: 9)),
+      Icon(icon, color: Colors.white, size: 24),
+      Text(val.toString(),
+          style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold)),
+      Text(label, style: const TextStyle(color: Colors.white54, fontSize: 9))
     ]);
   }
 
   Widget _itemInfo(String label, String? v) {
     if (v == null || v.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text("$label ", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 12)),
-        Expanded(child: Text(v, style: const TextStyle(color: Colors.white, fontSize: 12))),
-      ]),
-    );
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text("$label ",
+              style: TextStyle(
+                  color: themeColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12)),
+          Expanded(
+              child: Text(v,
+                  style: const TextStyle(color: Colors.white, fontSize: 12)))
+        ]));
   }
 
   Future<void> _gps() async {
@@ -380,139 +409,203 @@ class _MapScreenState extends State<MapScreen> {
     if (p != LocationPermission.denied) {
       Position pos = await Geolocator.getCurrentPosition();
       final GoogleMapController controller = await _controller.future;
-      controller.animateCamera(CameraUpdate.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 15));
+      controller.animateCamera(
+          CameraUpdate.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 15));
       buscarCrimes(LatLng(pos.latitude, pos.longitude));
     }
   }
 
-  void _snack(String t) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t), backgroundColor: Colors.red));
+  void _snack(String t) => ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content: Text(t), backgroundColor: Colors.red));
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: menuIndex,
-        backgroundColor: Colors.black, 
-        selectedItemColor: themeColor, 
+        backgroundColor: Colors.black,
+        selectedItemColor: themeColor,
         unselectedItemColor: Colors.white30,
         type: BottomNavigationBarType.fixed,
         onTap: (i) {
-          setState(() { 
-            menuIndex = i; 
-            _markers = {}; 
-            _circles = {};
-            estatisticasMarcas = {};
-            pontoSelecionado = null;
+          // --- CORREÇÃO DA PERDA DE LOCALIZAÇÃO ---
+          setState(() {
+            menuIndex = i;
+            // NÃO limpamos mais o pontoSelecionado aqui!
+            // Apenas reiniciamos os markers para carregar os novos
+            _markers = {};
+            // Se já tem um ponto selecionado, busca os dados da nova aba imediatamente
+            if (pontoSelecionado != null) {
+              buscarCrimes(pontoSelecionado!);
+            }
           });
         },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.phone_android), label: "Celulares"),
-          BottomNavigationBarItem(icon: Icon(Icons.directions_car), label: "Veículos"),
-          BottomNavigationBarItem(icon: Icon(Icons.warning_amber), label: "Acidentes"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.phone_android), label: "Celulares"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.directions_car), label: "Veículos"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.warning_amber), label: "Acidentes"),
         ],
       ),
-
       body: Stack(children: [
-        
-        // MAPA
         GoogleMap(
           mapType: MapType.normal,
-          initialCameraPosition: const CameraPosition(target: LatLng(-23.5505, -46.6333), zoom: 14.4746),
-          onMapCreated: (GoogleMapController controller) { _controller.complete(controller); },
-          markers: _markers, circles: _circles,
-          myLocationEnabled: true, myLocationButtonEnabled: false, zoomControlsEnabled: false,
-          onTap: (pos) => buscarCrimes(pos),
+          initialCameraPosition: const CameraPosition(
+              target: LatLng(-23.5505, -46.6333), zoom: 14.4746),
+          onMapCreated: (c) {
+            _controller.complete(c);
+          },
+          markers: _markers,
+          circles: _circles,
+          myLocationEnabled: true,
+          myLocationButtonEnabled: false,
+          zoomControlsEnabled: false,
+          onTap: buscarCrimes,
         ),
-        
-        // BARRA DE BUSCA
         Positioned(
-          top: 50, left: 15, right: 15,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.85),
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: themeColor.withOpacity(0.5)),
-              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)]
-            ),
-            child: TextField(
-              controller: _searchController,
-              onSubmitted: (value) => _buscarPorTexto(value),
-              textInputAction: TextInputAction.search,
-              style: const TextStyle(color: Colors.white), // Texto branco
-              decoration: InputDecoration(
-                  hintText: "Digite endereço ou CEP e dê Enter...",
-                  hintStyle: TextStyle(color: Colors.white38, fontSize: 13),
-                  prefixIcon: Icon(Icons.search, color: themeColor),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 15)),
-            ),
-          )
-        ),
-
-        // CONTROLES (SLIDER COM PROTEÇÃO REFORÇADA)
+            top: 50,
+            left: 15,
+            right: 15,
+            child: Container(
+              decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.85),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: themeColor.withOpacity(0.5))),
+              child: TextField(
+                  controller: _searchController,
+                  onSubmitted: _buscarPorTexto, // Chama a nova busca
+                  textInputAction: TextInputAction.search,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                      hintText: "Digite endereço ou CEP...",
+                      hintStyle:
+                          const TextStyle(color: Colors.white38, fontSize: 13),
+                      prefixIcon: Icon(Icons.search, color: themeColor),
+                      border: InputBorder.none,
+                      contentPadding:
+                          const EdgeInsets.symmetric(vertical: 15))),
+            )),
         Positioned(
-          top: 120, left: 15, right: 15,
-          child: GestureDetector(
-            // --- O SEGREDO DO SLIDER NÃO MEXER O MAPA ---
-            onVerticalDragStart: (_) {}, // Consome o toque vertical
-            onVerticalDragUpdate: (_) {}, 
-            // --------------------------------------------
-            child: Column(children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.85), 
-                  borderRadius: BorderRadius.circular(15), 
-                  border: Border.all(color: themeColor.withOpacity(0.5))
+            top: 120,
+            left: 15,
+            right: 15,
+            child: GestureDetector(
+              onVerticalDragStart: (_) {},
+              onVerticalDragUpdate: (_) {},
+              child: Column(children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.85),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: themeColor.withOpacity(0.5))),
+                  child: Column(children: [
+                    Text("RAIO: ${raioBusca.toInt()} METROS",
+                        style: TextStyle(
+                            color: themeColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11)),
+                    Slider(
+                        value: raioBusca,
+                        min: 10,
+                        max: 1000,
+                        divisions: 99,
+                        activeColor: themeColor,
+                        inactiveColor: Colors.grey[800],
+                        onChanged: (v) => setState(() {
+                              raioBusca = v;
+                              _atualizarCirculo();
+                            }),
+                        onChangeEnd: (v) {
+                          if (pontoSelecionado != null)
+                            buscarCrimes(pontoSelecionado!);
+                        })
+                  ]),
                 ),
-                child: Column(children: [
-                  Text("RAIO: ${raioBusca.toInt()} METROS", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 11)),
-                  Slider(
-                    value: raioBusca, 
-                    min: 10, max: 1000, divisions: 99, 
-                    activeColor: themeColor, 
-                    inactiveColor: Colors.grey[800],
-                    onChanged: (v) => setState(() { 
-                      raioBusca = v; 
-                      _atualizarCirculo(); 
-                    }), 
-                    onChangeEnd: (v) { if (pontoSelecionado != null) buscarCrimes(pontoSelecionado!); }
-                  ),
+                const SizedBox(height: 10),
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  _btn("2025", "2025"),
+                  _btn("3 ANOS", "3_anos"),
+                  _btn("5 ANOS", "5_anos")
                 ]),
-              ),
-              const SizedBox(height: 10),
-              Row(mainAxisAlignment: MainAxisAlignment.center, children: [_btn("2025", "2025"), _btn("3 ANOS", "3_anos"), _btn("5 ANOS", "5_anos")]),
-            ]),
-          )
-        ),
-
-        // BOTÃO GPS
-        Positioned(bottom: 20, left: 15, child: FloatingActionButton(backgroundColor: themeColor, onPressed: _gps, child: const Icon(Icons.my_location, color: Colors.black))),
-
-        // ESTATÍSTICAS
+              ]),
+            )),
+        Positioned(
+            bottom: 20,
+            left: 15,
+            child: FloatingActionButton(
+                backgroundColor: themeColor,
+                onPressed: _gps,
+                child: const Icon(Icons.my_location, color: Colors.black))),
         if (estatisticasMarcas.isNotEmpty)
           Positioned(
-            bottom: 20, right: 15, 
-            child: Container(
-              width: 200, padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.black.withOpacity(0.9), borderRadius: BorderRadius.circular(15), border: Border.all(color: themeColor.withOpacity(0.5))),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Text(menuIndex == 2 ? "TOP TIPOS" : "TOP MARCAS", style: TextStyle(color: themeColor, fontSize: 10, fontWeight: FontWeight.bold)),
-                  Divider(color: themeColor, height: 15),
-                  ... (estatisticasMarcas.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(5).map((e) => Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Flexible(child: Text(e.key, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 10))), Text("${e.value}", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 10))]))).toList(),
-                ]
-              )
-            )
-          ),
-        if (carregando) Center(child: CircularProgressIndicator(color: themeColor, strokeWidth: 8)),
+              bottom: 20,
+              right: 15,
+              child: Container(
+                  width: 200,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: themeColor.withOpacity(0.5))),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Text(menuIndex == 2 ? "TOP TIPOS" : "TOP MARCAS",
+                        style: TextStyle(
+                            color: themeColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
+                    Divider(color: themeColor, height: 15),
+                    ...(estatisticasMarcas.entries.toList()
+                          ..sort((a, b) => b.value.compareTo(a.value)))
+                        .take(5)
+                        .map((e) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 3),
+                            child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Flexible(
+                                      child: Text(e.key,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 10))),
+                                  Text("${e.value}",
+                                      style: TextStyle(
+                                          color: themeColor,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 10))
+                                ])))
+                        .toList()
+                  ]))),
+        if (carregando)
+          Center(
+              child:
+                  CircularProgressIndicator(color: themeColor, strokeWidth: 8)),
       ]),
     );
   }
 
   Widget _btn(String l, String v) {
     bool s = filtroAno == v;
-    return Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: s ? themeColor : Colors.black.withOpacity(0.8), foregroundColor: s ? Colors.black : Colors.white, side: BorderSide(color: s ? Colors.transparent : themeColor.withOpacity(0.5))), onPressed: () { setState(() => filtroAno = v); if (pontoSelecionado != null) buscarCrimes(pontoSelecionado!); }, child: Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold))));
+    return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: s ? themeColor : Colors.black.withOpacity(0.8),
+                foregroundColor: s ? Colors.black : Colors.white,
+                side: BorderSide(
+                    color:
+                        s ? Colors.transparent : themeColor.withOpacity(0.5))),
+            onPressed: () {
+              setState(() => filtroAno = v);
+              if (pontoSelecionado != null) buscarCrimes(pontoSelecionado!);
+            },
+            child: Text(l,
+                style: const TextStyle(
+                    fontSize: 10, fontWeight: FontWeight.bold))));
   }
 }
