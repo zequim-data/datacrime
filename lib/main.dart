@@ -102,38 +102,37 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   // --- 1. GERADOR DE BOLINHAS (TEXTO -> IMAGEM BITMAP) ---
-  Future<BitmapDescriptor> _criarIconeCustomizado(
-      String texto, Color cor) async {
+// --- 1. GERADOR DE BOLINHAS (TEXTO -> IMAGEM BITMAP) ---
+  Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
     final Paint paint = Paint()..color = cor.withOpacity(0.9);
-    final int size = 110; // Tamanho da bolinha em pixels
+    
+    // --- MUDANÇA AQUI: Reduzi de 110 para 60 ---
+    final int size = 60; 
+    // ------------------------------------------
 
     // Desenha o Círculo Colorido
     canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, paint);
-
+    
     // Desenha Borda Branca
     Paint borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4;
+      ..strokeWidth = 3; // Dei uma afinada na borda também (de 4 pra 3)
     canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, borderPaint);
 
-    // Desenha o Texto (Número ou !)
+    // Desenha o Texto (Número)
     TextPainter painter = TextPainter(textDirection: TextDirection.ltr);
     painter.text = TextSpan(
       text: texto,
-      style: TextStyle(
-          fontSize: size / 2.5,
-          color: Colors.white,
-          fontWeight: FontWeight.bold),
+      // Ajustei o tamanho da fonte proporcionalmente
+      style: TextStyle(fontSize: size / 2.2, color: Colors.white, fontWeight: FontWeight.bold),
     );
     painter.layout();
-    painter.paint(canvas,
-        Offset((size - painter.width) / 2, (size - painter.height) / 2));
+    painter.paint(canvas, Offset((size - painter.width) / 2, (size - painter.height) / 2));
 
-    final ui.Image img =
-        await pictureRecorder.endRecording().toImage(size, size);
+    final ui.Image img = await pictureRecorder.endRecording().toImage(size, size);
     final ByteData? data = await img.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.fromBytes(data!.buffer.asUint8List());
   }
@@ -163,36 +162,28 @@ class _MapScreenState extends State<MapScreen> {
           final ln = double.parse(c['lon'].toString());
 
           // Contagem para o ranking
-          String tipo = (c['tipo'] ?? 'N/I').toString().toUpperCase();
-          counts[tipo] = (counts[tipo] ?? 0) + 1;
+       String tipo = (c['tipo'] ?? 'N/I').toString().toUpperCase();
+            counts[tipo] = (counts[tipo] ?? 0) + 1;
 
-          // Lógica de Cores
-          Color corMarker = Colors.yellow;
-          String textoLabel = "";
+            // --- MUDANÇA AQUI: Lógica unificada para mostrar NÚMEROS sempre ---
+            Color corMarker = Colors.yellow;
+            int qtd = c['quantidade'] ?? 1; // Pega a quantidade ou assume 1
+            String textoLabel = "$qtd";     // Sempre mostra o número
 
-          if (menuIndex == 2) {
-            // Acidente
-            String sev = c['severidade'] ?? 'LEVE';
-            textoLabel = "!";
-            if (sev == 'FATAL')
-              corMarker = Colors.red;
-            else if (sev == 'GRAVE')
-              corMarker = Colors.orange;
-            else
-              corMarker = Colors.purpleAccent;
-          } else {
-            // Crimes
-            int qtd = c['quantidade'] ?? 1;
-            textoLabel = "$qtd";
-            if (qtd > 10)
-              corMarker = Colors.red;
-            else if (qtd > 5) corMarker = Colors.orange;
-          }
+            if (menuIndex == 2) { // Acidente
+              String sev = c['severidade'] ?? 'LEVE';
+              // Removemos o textoLabel = "!" e mantemos o número
+              if (sev == 'FATAL') corMarker = Colors.red;
+              else if (sev == 'GRAVE') corMarker = Colors.orange;
+              else corMarker = Colors.purpleAccent; 
+            } else { // Crimes
+              if (qtd > 10) corMarker = Colors.red;
+              else if (qtd > 5) corMarker = Colors.orange;
+            }
+            // -----------------------------------------------------------------
 
-          // Gera o ícone
-          BitmapDescriptor icon =
-              await _criarIconeCustomizado(textoLabel, corMarker);
-
+            // Gera o ícone
+            BitmapDescriptor icon = await _criarIconeCustomizado(textoLabel, corMarker);
           newMarkers.add(Marker(
             markerId: MarkerId("${c['lat']}_${c['lon']}"),
             position: LatLng(l, ln),
