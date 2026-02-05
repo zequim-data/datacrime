@@ -30,7 +30,7 @@ CONFIG = {
         "col_marca": "tp_sinistro_primario",
         "col_data": "data_sinistro",
         "col_ano_num": "ano_sinistro",
-        "tipo_filtro_ano": "number_safe_cast", # NOVA LÓGICA: Cast seguro
+        "tipo_filtro_ano": "number_safe_cast", # Lógica que validamos
         "geo_col_lat": "latitude",
         "geo_col_lon": "longitude"
     }
@@ -42,13 +42,11 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
     
     cfg = CONFIG[tipo_crime]
     
-    # 1. LATITUDE/LONGITUDE BLINDADAS
-    # Garante troca de vírgula por ponto e converte string para float
+    # 1. LATITUDE/LONGITUDE (Validado: Troca vírgula por ponto)
     lat_f = f"SAFE_CAST(REPLACE({cfg['geo_col_lat']}, ',', '.') AS FLOAT64)"
     lon_f = f"SAFE_CAST(REPLACE({cfg['geo_col_lon']}, ',', '.') AS FLOAT64)"
 
-    # 2. FILTRO DE ANO BLINDADO
-    # Sua amostra mostra "ano_sinistro": "2022" (String). Vamos converter para INT antes de comparar.
+    # 2. FILTRO DE ANO (Validado: Inteiro direto)
     if cfg.get('tipo_filtro_ano') == "number_safe_cast":
         col_ano = f"SAFE_CAST({cfg['col_ano_num']} AS INT64)"
         if filtro == "2025":
@@ -58,7 +56,7 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
         else:
             cond_ano = f"{col_ano} >= 2021"
     else:
-        # Lógica padrão para SSP
+        # Lógica legado (SSP)
         data_sql = f"SUBSTR({cfg['col_data']}, 1, 4)"
         if filtro == "2025":
             cond_ano = f"{data_sql} = '2025'"
@@ -67,9 +65,7 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
         else:
             cond_ano = f"{data_sql} >= '2021'"
 
-    # 3. SEVERIDADE BLINDADA (A MÁGICA ACONTECE AQUI)
-    # COALESCE(..., 0) transforma null em 0
-    # SAFE_CAST(..., FLOAT64) transforma "1.0" (string) em 1.0 (numero)
+    # 3. SEVERIDADE (Validado: Trata Nulos e Strings Numéricas)
     extra_campos = ""
     if tipo_crime == "acidente":
         extra_campos = """, 
@@ -115,7 +111,7 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
     elif tipo_crime == "celular":
         campos = f"{cfg['col_marca']} as marca, rubrica"
     else: 
-        # Acidente: Usamos logradouro para dar contexto
+        # Acidente
         campos = f"{cfg['col_marca']} as marca, logradouro as rubrica"
     
     query = f"""
