@@ -1,0 +1,28 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Backend (FastAPI)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/backend/main.py",
+            "console": "integratedTerminal",
+            "env": {
+                "GOOGLE_APPLICATION_CREDENTIALS": "${workspaceFolder}/backend/credentials.json"
+            }
+        },
+        {
+            "name": "Frontend (Flutter Web)",
+            "type": "dart",
+            "request": "launch",
+            "program": "lib/main.dart",
+            "args": ["-d", "chrome"]
+        }
+    ],
+    "compounds": [
+        {
+            "name": "DataCrime Total (Full Stack)",
+            "configurations": ["Backend (FastAPI)", "Frontend (Flutter Web)"]
+        }
+    ]
+}
