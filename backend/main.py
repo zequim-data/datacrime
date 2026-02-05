@@ -180,5 +180,3 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
-
-    ##
