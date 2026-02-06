@@ -406,7 +406,7 @@ Widget _cardVeiculo(dynamic v) {
         currentIndex: menuIndex,
         backgroundColor: Colors.black,
         selectedItemColor: themeColor,
-        unselectedItemColor: Colors.white30,
+        unselectedItemColor: Colors.white60,
         type: BottomNavigationBarType.fixed,
         onTap: (i) {
           setState(() {
