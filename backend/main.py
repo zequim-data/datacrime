@@ -53,14 +53,19 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
     lon_f = f"SAFE_CAST(REPLACE({cfg['geo_col_lon']}, ',', '.') AS FLOAT64)"
 
     if tipo_crime == "acidente":
-        col_ano = f"SAFE_CAST({cfg['col_ano_num']} AS INT64)"
-        if filtro == "2025": cond_ano = f"{col_ano} = 2025"
-        elif filtro == "3_anos": cond_ano = f"{col_ano} >= 2023"
-        else: cond_ano = f"{col_ano} >= 2021"
+        if tipo_crime == "acidente":
+            col_ano = cfg['col_ano_num'] # ano_sinistro
+        if filtro == "2025": 
+            cond_ano = f"{col_ano} = '2025'"
+        elif filtro == "3_anos": 
+            cond_ano = f"{col_ano} >= '2023'"
+        else: 
+            cond_ano = f"{col_ano} >= '2021'"
     else:
         cond_ano = f"{cfg['col_ano_str']} >= '2021'" 
         if filtro == "2025": cond_ano = f"{cfg['col_ano_str']} = '2025'"
         elif filtro == "3_anos": cond_ano = f"{cfg['col_ano_str']} >= '2023'"
+        else: cond_ano = f"{cfg['col_ano_str']} >= '2021'"
 
     extra_campos = ""
     if tipo_crime == "acidente":
