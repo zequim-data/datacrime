@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart'; // <--- OBRIGATÓRIO
 import 'dart:convert';
 
 void main() => runApp(const MaterialApp(
@@ -23,7 +24,7 @@ class _MapScreenState extends State<MapScreen> {
   final Completer<GoogleMapController> _controller = Completer();
   final TextEditingController _searchController = TextEditingController();
 
-  // --- ATENÇÃO: Verifique se sua Geocoding API está ativa ---
+  // --- CONFIGURAÇÕES ---
   final String googleApiKey = "SUA_CHAVE_DA_API_AQUI";
   final String baseUrl =
       "https://zecchin-api-997663776889.southamerica-east1.run.app";
@@ -45,21 +46,14 @@ class _MapScreenState extends State<MapScreen> {
     return "acidente";
   }
 
-  // Laranja Neon bem vivo para destacar no preto
+  // Laranja Neon (Bem visível)
   Color get themeColor => Colors.orangeAccent;
 
-  // --- PROTEÇÃO TOTAL CONTRA CLIQUES NO MAPA ---
+  // --- O ESCUDO (Bloqueia o clique de passar pro mapa) ---
   Widget _bloqueioMapa({required Widget child}) {
-    return Listener(
-      // O Listener pega o toque ANTES de todo mundo
-      onPointerDown: (_) {},
-      onPointerMove: (_) {},
-      child: GestureDetector(
-        onTap: () {}, // Engole toques simples
-        onPanUpdate: (_) {}, // Engole ARRASTOS EM QUALQUER DIREÇÃO (O segredo!)
-        behavior: HitTestBehavior.opaque, // Garante que a área toda bloqueie
-        child: child,
-      ),
+    return PointerInterceptor(
+      child: child,
+      // debug: true, // <--- Descomente isso se quiser ver uma caixa verde onde o bloqueio está
     );
   }
 
@@ -114,21 +108,17 @@ class _MapScreenState extends State<MapScreen> {
       String texto, Color cor) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
-    // Cor sólida e forte
     final Paint paint = Paint()..color = cor.withOpacity(1.0);
-    final int size = 30; // Tamanho ideal
+    final int size = 30;
 
-    // Fundo
     canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, paint);
 
-    // Borda Branca
     Paint borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
     canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, borderPaint);
 
-    // Texto apenas se for agrupamento (>1)
     if (int.tryParse(texto) != null && int.parse(texto) > 1) {
       TextPainter painter = TextPainter(textDirection: TextDirection.ltr);
       painter.text = TextSpan(
@@ -155,13 +145,15 @@ class _MapScreenState extends State<MapScreen> {
     });
 
     try {
-      final url = Uri.parse(
-          '$baseUrl/crimes?lat=${pos.latitude}&lon=${pos.longitude}&raio=${raioBusca.toInt()}&filtro=$filtroAno&tipo_crime=$tipoCrimeParam');
-      final response = await http.get(url);
+      final String linkReq =
+          '$baseUrl/crimes?lat=${pos.latitude}&lon=${pos.longitude}&raio=${raioBusca.toInt()}&filtro=$filtroAno&tipo_crime=$tipoCrimeParam';
+      print(
+          "🔍 DEBUG LINK: $linkReq"); // <--- OLHE NO CONSOLE DO NAVEGADOR (F12)
 
-      // --- TRATAMENTO DE ERROS DO SERVIDOR (DIAGNÓSTICO) ---
+      final response = await http.get(Uri.parse(linkReq));
+
       if (response.statusCode != 200) {
-        _snack("Erro Servidor (${response.statusCode}): Verifique o Backend.");
+        _snack("Erro Servidor (${response.statusCode})");
         setState(() => carregando = false);
         return;
       }
@@ -170,7 +162,7 @@ class _MapScreenState extends State<MapScreen> {
       final List<dynamic> crimes = responseData['data'] ?? [];
 
       if (crimes.isEmpty) {
-        _snack("Nenhum registro encontrado para $filtroAno.");
+        _snack("Zero registros de '$tipoCrimeParam' para '$filtroAno' aqui.");
       }
 
       Map<String, int> counts = {};
@@ -216,7 +208,7 @@ class _MapScreenState extends State<MapScreen> {
         estatisticasMarcas = counts;
       });
     } catch (e) {
-      _snack("Erro de conexão/App.");
+      _snack("Erro App: $e");
     } finally {
       setState(() => carregando = false);
     }
@@ -234,7 +226,7 @@ class _MapScreenState extends State<MapScreen> {
         final Map<String, dynamic> responseData = json.decode(body);
         _exibirGavetaDetalhes(responseData['data'] ?? []);
       } else {
-        _snack("Erro Servidor ao buscar detalhes: ${response.statusCode}");
+        _snack("Erro Detalhes: ${response.statusCode}");
       }
     } catch (e) {
       _snack("Erro ao buscar detalhes.");
@@ -266,7 +258,7 @@ class _MapScreenState extends State<MapScreen> {
                     color: Colors.white24,
                     borderRadius: BorderRadius.circular(10))),
             const SizedBox(height: 15),
-            Text("${lista.length} REGISTROS NESTE LOCAL",
+            Text("${lista.length} REGISTROS AQUI",
                 style: TextStyle(
                     color: themeColor,
                     fontWeight: FontWeight.bold,
@@ -486,7 +478,7 @@ class _MapScreenState extends State<MapScreen> {
           onTap: buscarCrimes,
         ),
 
-        // --- 1. BUSCA (BLINDADA + BOTÃO LUPA) ---
+        // --- 1. BUSCA (BLINDADA) ---
         Positioned(
             top: 50,
             left: 15,
@@ -509,12 +501,10 @@ class _MapScreenState extends State<MapScreen> {
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(
                           vertical: 15, horizontal: 20),
-                      // Botão de lupa clicável
                       suffixIcon: IconButton(
-                        icon: Icon(Icons.search, color: themeColor),
-                        onPressed: () =>
-                            _buscarPorTexto(_searchController.text),
-                      ))),
+                          icon: Icon(Icons.search, color: themeColor),
+                          onPressed: () =>
+                              _buscarPorTexto(_searchController.text)))),
             ))),
 
         // --- 2. SLIDER E FILTROS (BLINDADOS) ---
@@ -570,6 +560,7 @@ class _MapScreenState extends State<MapScreen> {
                 onPressed: _gps,
                 child: const Icon(Icons.my_location, color: Colors.black))),
 
+        // --- 3. ESTATÍSTICAS (BLINDADAS) ---
         if (estatisticasMarcas.isNotEmpty)
           Positioned(
               bottom: 20,
