@@ -84,19 +84,21 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
                 ELSE 'LEVE' 
             END as severidade"""
 
+    # --- CORREÇÃO AQUI: SAFE.ST_GEOGPOINT + FILTRO DE LATITUDE ---
     query = f"""
         SELECT {lat_f} as lat, {lon_f} as lon, {cfg['col_marca']} as tipo, 1 as quantidade {extra_campos}
         FROM `{cfg['tabela']}`
         WHERE {lat_f} IS NOT NULL 
+          AND {lat_f} BETWEEN -90 AND 90  -- <--- PROTEGE O APP FLUTTER
+          AND {lon_f} BETWEEN -180 AND 180 
           AND {cond_ano}
-          AND ST_DISTANCE(ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio}
+          -- SAFE.ST_GEOGPOINT retorna NULL se o dado for ruim, em vez de travar
+          AND ST_DISTANCE(SAFE.ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio}
         LIMIT 50000
     """
 
-    # --- AGORA IMPRIME A QUERY GERAL TAMBÉM ---
     logger.info(f"--- QUERY GERAL ({tipo_crime} | Filtro: {filtro}) ---")
     logger.info(query)
-    # ------------------------------------------
 
     try:
         df = client.query(query).to_dataframe()
@@ -149,7 +151,9 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
                 ) as lista_pessoas
             FROM `{cfg['tabela']}` t
             WHERE {cond_ano}
-              AND ST_DISTANCE(ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio_detalhe}
+              AND {lat_f} BETWEEN -90 AND 90 -- <--- PROTEÇÃO
+              AND {lon_f} BETWEEN -180 AND 180
+              AND ST_DISTANCE(SAFE.ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio_detalhe}
             LIMIT 50
         """
     else:
@@ -158,7 +162,8 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
             SELECT {campos}, CAST({cfg['col_exibicao_data']} AS STRING) as data, COALESCE({cfg['col_local']}, 'Endereço N/I') as local_texto
             FROM `{cfg['tabela']}`
             WHERE {cond_ano}
-              AND ST_DISTANCE(ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio_detalhe}
+              AND {lat_f} BETWEEN -90 AND 90 
+              AND ST_DISTANCE(SAFE.ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio_detalhe}
             LIMIT 50
         """
 
