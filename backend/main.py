@@ -4,6 +4,11 @@ from google.cloud import bigquery
 import uvicorn
 import pandas as pd
 import numpy as np
+import logging
+
+# Configuração de Logs para aparecer no painel do Cloud Run
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("API_ZECCHIN")
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -41,22 +46,31 @@ def sanitizar_dataframe(df):
     return df.to_dict(orient="records")
 
 def get_geo_sql(campo):
-    """Trata campos de coordenadas que podem vir como string com vírgula ou já como float."""
+    """
+    Trata campos de coordenadas.
+    IMPORTANTE: Seus dados têm vírgula (-22,123). O REPLACE corrige isso para ponto (-22.123).
+    """
     return f"SAFE_CAST(REPLACE(CAST({campo} AS STRING), ',', '.') AS FLOAT64)"
 
 def get_condicao_ano(filtro, col_filtro):
     """
-    Gera a cláusula WHERE baseada no filtro selecionado.
-    Para 'ano_sinistro', tratamos como número para garantir que o filtro de range (>=) funcione.
+    Gera a cláusula WHERE. 
+    Resolve o problema de '2022' (string) vs 2022 (int).
     """
     if col_filtro == "ano_sinistro":
-        col_sql = f"SAFE_CAST({col_filtro} AS INT64)"
+        # Converte tudo para INTEIRO antes de comparar
+        # SAFE_CAST(FLOAT) previne erro se vier "2022.0"
+        col_sql = f"CAST(SAFE_CAST({col_filtro} AS FLOAT64) AS INT64)"
+        
         if filtro == "2025": return f"{col_sql} = 2025"
+        # "3 anos" pega 2023, 2024, 2025
         if filtro == "3_anos": return f"{col_sql} >= 2023"
+        # "5 anos" pega >= 2021 (Inclui seus dados de 2022!)
         if filtro == "5_anos": return f"{col_sql} >= 2021"
+        
         return f"{col_sql} >= 2021"
     else:
-        # Para colunas de data completa, extraímos os 4 primeiros caracteres (YYYY)
+        # Para Celular/Veículo (Data completa YYYY-MM-DD)
         ano_sql = f"SUBSTR(CAST({col_filtro} AS STRING), 1, 4)"
         if filtro == "2025": return f"{ano_sql} = '2025'"
         if filtro == "3_anos": return f"{ano_sql} >= '2023'"
@@ -93,6 +107,7 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
         df = client.query(query).to_dataframe()
         return {"data": sanitizar_dataframe(df)}
     except Exception as e:
+        logger.error(f"ERRO CRIMES: {e}")
         return {"data": [], "error": str(e)}
 
 @app.get("/detalhes")
@@ -104,8 +119,16 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
     lon_f = get_geo_sql("longitude")
     cond_ano = get_condicao_ano(filtro, cfg['col_filtro_ano'])
 
+    # AUMENTO DO RAIO DE PRECISÃO (CRUCIAL PARA ACERTAR O CLIQUE)
+    raio_detalhe = 50 
+
     if tipo_crime == "acidente":
-        # Melhoramos o JOIN usando CAST para INT64 para evitar erros de comparação de STRING
+        # A MÁGICA DO JOIN:
+        # Usamos CAST(SAFE_CAST(... AS FLOAT64) AS INT64) em ambos os lados
+        # Isso iguala "1830236" (string) com 1830236 (int) com "1830236.0" (float string)
+        join_veiculos = "CAST(SAFE_CAST(v.id_sinistro AS FLOAT64) AS INT64) = CAST(SAFE_CAST(t.id_sinistro AS FLOAT64) AS INT64)"
+        join_pessoas = "CAST(SAFE_CAST(p.id_sinistro AS FLOAT64) AS INT64) = CAST(SAFE_CAST(t.id_sinistro AS FLOAT64) AS INT64)"
+
         query = f"""
             SELECT 
                 tp_sinistro_primario as rubrica,
@@ -121,7 +144,7 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
                         ano_fabricacao as ano_fab, 
                         tipo_veiculo as tipo
                     FROM `zecchin-analytica.infosiga_raw.raw_veiculos` v 
-                    WHERE SAFE_CAST(v.id_sinistro AS INT64) = SAFE_CAST(t.id_sinistro AS INT64)
+                    WHERE {join_veiculos}
                 ) as lista_veiculos,
                 ARRAY(
                     SELECT AS STRUCT 
@@ -131,27 +154,34 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
                         descr_profissao as profissao, 
                         tp_envolvido as tipo_vitima
                     FROM `zecchin-analytica.infosiga_raw.raw_pessoas` p 
-                    WHERE SAFE_CAST(p.id_sinistro AS INT64) = SAFE_CAST(t.id_sinistro AS INT64)
+                    WHERE {join_pessoas}
                 ) as lista_pessoas
             FROM `{cfg['tabela']}` t
             WHERE {cond_ano}
-              AND ST_DISTANCE(ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= 10
-            LIMIT 500
+              AND ST_DISTANCE(ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio_detalhe}
+            LIMIT 50
         """
     else:
+        # Query para Celular/Veículos (Simplificada)
         campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica" if tipo_crime == "veiculo" else f"{cfg['col_marca']} as marca, rubrica"
         query = f"""
             SELECT {campos}, CAST({cfg['col_exibicao_data']} AS STRING) as data, COALESCE({cfg['col_local']}, 'Endereço N/I') as local_texto
             FROM `{cfg['tabela']}`
             WHERE {cond_ano}
-              AND ST_DISTANCE(ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= 10
-            LIMIT 500
+              AND ST_DISTANCE(ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio_detalhe}
+            LIMIT 50
         """
+
+    logger.info(f"--- QUERY DETALHES ({tipo_crime}) ---")
+    logger.info(query)
 
     try:
         df = client.query(query).to_dataframe()
+        if df.empty:
+            logger.warning(f"DETALHES VAZIOS! Lat: {lat}, Lon: {lon}, Filtro: {filtro}")
         return {"data": sanitizar_dataframe(df)}
     except Exception as e:
+        logger.error(f"ERRO SQL DETALHES: {e}")
         return {"data": [], "error_debug": str(e)}
 
 if __name__ == "__main__":
