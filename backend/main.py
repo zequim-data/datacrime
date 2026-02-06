@@ -10,13 +10,13 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 client = bigquery.Client(project='zecchin-analytica')
 
+# CONFIGURAÇÃO UNIFICADA
 CONFIG = {
     "celular": {
         "tabela": "zecchin-analytica.ssp_raw.raw_celulares_ssp",
         "col_marca": "marca_objeto",
         "col_data": "datahora_registro_bo",
-        "col_ano_str": "SUBSTR(datahora_registro_bo, 1, 4)", 
-        "col_local": "logradouro",  # <--- COLUNA NOVA (Endereço)
+        "col_local": "logradouro",
         "geo_col_lat": "latitude",
         "geo_col_lon": "longitude"
     },
@@ -24,8 +24,7 @@ CONFIG = {
         "tabela": "zecchin-analytica.ssp_raw.raw_veiculos_ssp",
         "col_marca": "descr_marca_veiculo",
         "col_data": "datahora_registro_bo",
-        "col_ano_str": "SUBSTR(datahora_registro_bo, 1, 4)",
-        "col_local": "logradouro",  # <--- COLUNA NOVA (Endereço)
+        "col_local": "logradouro",
         "geo_col_lat": "latitude",
         "geo_col_lon": "longitude"
     },
@@ -33,7 +32,6 @@ CONFIG = {
         "tabela": "zecchin-analytica.infosiga_raw.raw_sinistros",
         "col_marca": "tp_sinistro_primario",
         "col_data": "data_sinistro",
-        "col_ano_num": "ano_sinistro",
         "col_local": "logradouro",
         "geo_col_lat": "latitude",
         "geo_col_lon": "longitude"
@@ -44,6 +42,16 @@ def sanitizar_dataframe(df):
     df = df.replace({np.nan: None})
     return df.to_dict(orient="records")
 
+# FUNÇÃO DE FILTRO CORRIGIDA (CRITÉRIO: SUBSTR PARA TUDO)
+def get_condicao_ano(filtro, col_data):
+    ano_sql = f"SUBSTR(CAST({col_data} AS STRING), 1, 4)"
+    if filtro == "2025":
+        return f"{ano_sql} = '2025'"
+    elif filtro == "3_anos":
+        return f"{ano_sql} >= '2023'"
+    else: # 5 anos ou padrão
+        return f"{ano_sql} >= '2021'"
+
 @app.get("/crimes")
 def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
     if tipo_crime not in CONFIG: return {"data": []}
@@ -51,21 +59,9 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
     
     lat_f = f"SAFE_CAST(REPLACE({cfg['geo_col_lat']}, ',', '.') AS FLOAT64)"
     lon_f = f"SAFE_CAST(REPLACE({cfg['geo_col_lon']}, ',', '.') AS FLOAT64)"
-
-    if tipo_crime == "acidente":
-        if tipo_crime == "acidente":
-            col_ano = cfg['col_ano_num'] # ano_sinistro
-        if filtro == "2025": 
-            cond_ano = f"{col_ano} = '2025'"
-        elif filtro == "3_anos": 
-            cond_ano = f"{col_ano} >= '2023'"
-        else: 
-            cond_ano = f"{col_ano} >= '2021'"
-    else:
-        cond_ano = f"{cfg['col_ano_str']} >= '2021'" 
-        if filtro == "2025": cond_ano = f"{cfg['col_ano_str']} = '2025'"
-        elif filtro == "3_anos": cond_ano = f"{cfg['col_ano_str']} >= '2023'"
-        else: cond_ano = f"{cfg['col_ano_str']} >= '2021'"
+    
+    # Aplica o filtro de ano usando a nova lógica unificada
+    cond_ano = get_condicao_ano(filtro, cfg['col_data'])
 
     extra_campos = ""
     if tipo_crime == "acidente":
@@ -88,11 +84,10 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
           AND {lon_f} IS NOT NULL
           AND {cond_ano}
           AND ST_DISTANCE(ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio}
-        LIMIT 1000
+        LIMIT 50000
     """
     
     try:
-        print(query)
         df = client.query(query).to_dataframe()
         return {"data": sanitizar_dataframe(df)}
     except Exception as e:
@@ -106,82 +101,47 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
 
     lat_f = f"SAFE_CAST(REPLACE({cfg['geo_col_lat']}, ',', '.') AS FLOAT64)"
     lon_f = f"SAFE_CAST(REPLACE({cfg['geo_col_lon']}, ',', '.') AS FLOAT64)"
+    cond_ano = get_condicao_ano(filtro, cfg['col_data'])
 
     if tipo_crime == "acidente":
         query = f"""
             SELECT 
                 t.tp_sinistro_primario as rubrica,
-                t.{cfg['col_local']} as local_texto,
+                COALESCE(t.{cfg['col_local']}, 'Local não informado') as local_texto,
                 CAST(t.{cfg['col_data']} AS STRING) as data,
-                
                 CASE 
                     WHEN COALESCE(SAFE_CAST(t.qtd_gravidade_fatal AS FLOAT64), 0) > 0 THEN 'FATAL' 
                     WHEN COALESCE(SAFE_CAST(t.qtd_gravidade_grave AS FLOAT64), 0) > 0 THEN 'GRAVE' 
                     ELSE 'LEVE' 
                 END as severidade,
-
-                COALESCE(SAFE_CAST(t.qtd_automovel AS INT64), 0) as autos,
-                COALESCE(SAFE_CAST(t.qtd_motocicleta AS INT64), 0) as motos,
-                COALESCE(SAFE_CAST(t.qtd_pedestre AS INT64), 0) as pedestres,
-
                 ARRAY(
-                    SELECT AS STRUCT 
-                        v.marca_modelo as modelo,
-                        v.cor_veiculo as cor,
-                        CAST(SAFE_CAST(v.ano_fab AS FLOAT64) AS INT64) as ano_fab,
-                        v.tipo_veiculo as tipo
+                    SELECT AS STRUCT v.marca_modelo as modelo, v.cor_veiculo as cor, CAST(SAFE_CAST(v.ano_fab AS FLOAT64) AS INT64) as ano_fab, v.tipo_veiculo as tipo
                     FROM `zecchin-analytica.infosiga_raw.raw_veiculos` v 
                     WHERE CAST(v.id_sinistro AS STRING) = CAST(t.id_sinistro AS STRING)
                 ) as lista_veiculos,
-
                 ARRAY(
-                    SELECT AS STRUCT 
-                        CAST(SAFE_CAST(p.idade AS FLOAT64) AS INT64) as idade,
-                        p.sexo,
-                        p.gravidade_lesao as lesao,
-                        p.tipo_de_vitima as tipo_vitima,
-                        p.profissao
+                    SELECT AS STRUCT CAST(SAFE_CAST(p.idade AS FLOAT64) AS INT64) as idade, p.sexo, p.gravidade_lesao as lesao, p.tipo_de_vitima as tipo_vitima, p.profissao
                     FROM `zecchin-analytica.infosiga_raw.raw_pessoas` p 
                     WHERE CAST(p.id_sinistro AS STRING) = CAST(t.id_sinistro AS STRING)
                 ) as lista_pessoas
-
             FROM `{cfg['tabela']}` t
-            WHERE {lat_f} = {lat} AND {lon_f} = {lon}
-            LIMIT 50
+            WHERE {lat_f} = {lat} AND {lon_f} = {lon} AND {cond_ano}
+            LIMIT 500
         """
     else:
-        campos = ""
-        if tipo_crime == "veiculo":
-            campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica"
-        else:
-            campos = f"{cfg['col_marca']} as marca, rubrica"
-        
-        # --- CORREÇÃO AQUI ---
-        # Agora puxamos 'logradouro' (cfg['col_local']) e se vier vazio, colocamos um aviso
+        campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica" if tipo_crime == "veiculo" else f"{cfg['col_marca']} as marca, rubrica"
         query = f"""
-            SELECT 
-                {campos}, 
-                CAST({cfg['col_data']} AS STRING) as data, 
-                COALESCE({cfg['col_local']}, 'Endereço não informado') as local_texto
+            SELECT {campos}, CAST({cfg['col_data']} AS STRING) as data, COALESCE({cfg['col_local']}, 'Endereço não informado') as local_texto
             FROM `{cfg['tabela']}`
-            WHERE {lat_f} = {lat} AND {lon_f} = {lon}
-            LIMIT 50
+            WHERE {lat_f} = {lat} AND {lon_f} = {lon} AND {cond_ano}
+            LIMIT 500
         """
 
     try:
         query_job = client.query(query)
-        results = []
-        for row in query_job:
-            item = dict(row)
-            if 'lista_veiculos' in item and item['lista_veiculos']:
-                item['lista_veiculos'] = [dict(v) for v in item['lista_veiculos']]
-            if 'lista_pessoas' in item and item['lista_pessoas']:
-                item['lista_pessoas'] = [dict(p) for p in item['lista_pessoas']]
-            results.append(item)
-            
+        results = [dict(row) for row in query_job]
         return {"data": results}
     except Exception as e:
-        print(f"ERRO CRÍTICO NO GET_DETALHES: {e}")
         return {"data": [], "error_debug": str(e)}
 
 if __name__ == "__main__":
