@@ -592,7 +592,7 @@ Widget _cardVeiculo(dynamic v) {
         child: ElevatedButton(
             style: ElevatedButton.styleFrom(
                 backgroundColor: s ? themeColor : Colors.black.withOpacity(0.8),
-                foregroundColor: s ? Colors.black : Colors.white,
+                foregroundColor: s ? Colors.black : Colors.grey,
                 side: BorderSide(
                     color:
                         s ? Colors.transparent : themeColor.withOpacity(0.5))),
