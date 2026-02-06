@@ -27,7 +27,7 @@ jobs:
       - name: Deploy para o Firebase
         run: |
           sudo npm install -g firebase-tools
-          firebase deploy --only hosting --token ${{ secrets.FIREBASE_TOKEN }}
+          firebase deploy --only hosting --project zecchin-analytica --token ${{ secrets.FIREBASE_TOKEN }}
 
   # --- TRILHA 2: BACKEND (O Pulo do Gato) ---
   deploy_backend:
