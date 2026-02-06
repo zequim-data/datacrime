@@ -1,15 +1,10 @@
 {
-  "projects": {
-    "default": "zecchin-analytica"
-  },
   "targets": {
     "zecchin-analytica": {
       "hosting": {
-        "site-datacrime": [
-          "datacrime"
-        ]
+        "site-datacrime": ["datacrime"],
+        "site-zecchin": ["zecchin-analytica"]
       }
     }
-  },
-  "etags": {}
+  }
 }
