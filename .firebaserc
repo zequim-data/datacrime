@@ -6,7 +6,7 @@
     "zecchin-analytica": {
       "hosting": {
         "site-datacrime": [
-          "datacrime.web.app"
+          "datacrime"
         ]
       }
     }

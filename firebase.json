@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "target": "site-datacrime",
     "public": "build/web",
     "ignore": [
       "firebase.json",
