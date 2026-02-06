@@ -124,7 +124,7 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
     lon_f = get_geo_sql("longitude")
     cond_ano = get_condicao_ano(filtro, cfg['col_filtro_ano'])
 
-    raio_detalhe = 50 
+    raio_detalhe = 2 
 
     if tipo_crime == "acidente":
         join_veiculos = "CAST(SAFE_CAST(v.id_sinistro AS FLOAT64) AS INT64) = CAST(SAFE_CAST(t.id_sinistro AS FLOAT64) AS INT64)"
