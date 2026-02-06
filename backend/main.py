@@ -84,21 +84,19 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
                 ELSE 'LEVE' 
             END as severidade"""
 
-    # --- CORREÇÃO AQUI: SAFE.ST_GEOGPOINT + FILTRO DE LATITUDE ---
     query = f"""
         SELECT {lat_f} as lat, {lon_f} as lon, {cfg['col_marca']} as tipo, 1 as quantidade {extra_campos}
         FROM `{cfg['tabela']}`
         WHERE {lat_f} IS NOT NULL 
-          AND {lat_f} BETWEEN -90 AND 90  -- <--- PROTEGE O APP FLUTTER
+          AND {lat_f} BETWEEN -90 AND 90
           AND {lon_f} BETWEEN -180 AND 180 
           AND {cond_ano}
-          -- SAFE.ST_GEOGPOINT retorna NULL se o dado for ruim, em vez de travar
           AND ST_DISTANCE(SAFE.ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio}
         LIMIT 50000
     """
 
-    logger.info(f"--- QUERY GERAL ({tipo_crime} | Filtro: {filtro}) ---")
-    logger.info(query)
+    # LOG UNIFICADO PARA NÃO SUMIR NO FILTRO
+    logger.info(f"--- QUERY GERAL ({tipo_crime}) ---\n{query}")
 
     try:
         df = client.query(query).to_dataframe()
@@ -116,7 +114,7 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
     lon_f = get_geo_sql("longitude")
     cond_ano = get_condicao_ano(filtro, cfg['col_filtro_ano'])
 
-    raio_detalhe = 50 
+    raio_detalhe = 2 
 
     if tipo_crime == "acidente":
         join_veiculos = "CAST(SAFE_CAST(v.id_sinistro AS FLOAT64) AS INT64) = CAST(SAFE_CAST(t.id_sinistro AS FLOAT64) AS INT64)"
@@ -151,10 +149,10 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
                 ) as lista_pessoas
             FROM `{cfg['tabela']}` t
             WHERE {cond_ano}
-              AND {lat_f} BETWEEN -90 AND 90 -- <--- PROTEÇÃO
+              AND {lat_f} BETWEEN -90 AND 90
               AND {lon_f} BETWEEN -180 AND 180
               AND ST_DISTANCE(SAFE.ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio_detalhe}
-            LIMIT 50
+            LIMIT 500
         """
     else:
         campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica" if tipo_crime == "veiculo" else f"{cfg['col_marca']} as marca, rubrica"
@@ -164,11 +162,11 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
             WHERE {cond_ano}
               AND {lat_f} BETWEEN -90 AND 90 
               AND ST_DISTANCE(SAFE.ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio_detalhe}
-            LIMIT 50
+            LIMIT 500
         """
 
-    logger.info(f"--- QUERY DETALHES ({tipo_crime}) ---")
-    logger.info(query)
+    # LOG UNIFICADO (TÍTULO + QUERY NO MESMO BLOCO)
+    logger.info(f"--- QUERY DETALHES ({tipo_crime}) ---\n{query}")
 
     try:
         df = client.query(query).to_dataframe()
