@@ -5,6 +5,7 @@ import uvicorn
 import pandas as pd
 import numpy as np
 import logging
+import json # <--- IMPORTANTE: Adicionado para a nova sanitização
 
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO)
@@ -41,9 +42,20 @@ CONFIG = {
 }
 
 def sanitizar_dataframe(df):
-    """Converte NaNs para None para evitar erro de JSON no FastAPI."""
-    df = df.replace({np.nan: None})
-    return df.to_dict(orient="records")
+    """
+    Converte o DataFrame para uma lista de dicionários Python puros.
+    Usa to_json() primeiro para garantir que tipos complexos (NumPy, Arrays, Datas)
+    sejam convertidos corretamente para padrões web, evitando erros 500 no FastAPI.
+    """
+    try:
+        if df.empty:
+            return []
+        # Converte para JSON string (padrão ISO para datas) e carrega de volta como dict puro
+        json_str = df.to_json(orient="records", date_format="iso")
+        return json.loads(json_str)
+    except Exception as e:
+        logger.error(f"ERRO SANITIZACAO: {e}")
+        return []
 
 def get_geo_sql(campo):
     """Trata campos de coordenadas."""
@@ -112,7 +124,7 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
     lon_f = get_geo_sql("longitude")
     cond_ano = get_condicao_ano(filtro, cfg['col_filtro_ano'])
 
-    raio_detalhe = 2 
+    raio_detalhe = 50 
 
     if tipo_crime == "acidente":
         join_veiculos = "CAST(SAFE_CAST(v.id_sinistro AS FLOAT64) AS INT64) = CAST(SAFE_CAST(t.id_sinistro AS FLOAT64) AS INT64)"
@@ -154,7 +166,7 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
               AND {lat_f} BETWEEN -90 AND 90
               AND {lon_f} BETWEEN -180 AND 180
               AND ST_DISTANCE(SAFE.ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio_detalhe}
-            LIMIT 500
+            LIMIT 50
         """
     else:
         campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica" if tipo_crime == "veiculo" else f"{cfg['col_marca']} as marca, rubrica"
@@ -164,7 +176,7 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
             WHERE {cond_ano}
               AND {lat_f} BETWEEN -90 AND 90 
               AND ST_DISTANCE(SAFE.ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio_detalhe}
-            LIMIT 500
+            LIMIT 50
         """
 
     query_oneline = query.replace('\n', ' ').replace('   ', ' ')
