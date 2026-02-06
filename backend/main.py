@@ -52,9 +52,7 @@ def get_geo_sql(campo):
 def get_condicao_ano(filtro, col_filtro):
     """Gera a cláusula WHERE."""
     if col_filtro == "ano_sinistro":
-        # Converte para INT64 de forma segura
         col_sql = f"CAST(SAFE_CAST({col_filtro} AS FLOAT64) AS INT64)"
-        
         if filtro == "2025": return f"{col_sql} = 2025"
         if filtro == "3_anos": return f"{col_sql} >= 2023"
         if filtro == "5_anos": return f"{col_sql} >= 2021"
@@ -125,8 +123,6 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
                 tp_sinistro_primario as rubrica,
                 COALESCE({cfg['col_local']}, 'Local não informado') as local_texto,
                 CAST({cfg['col_exibicao_data']} AS STRING) as data,
-                
-                -- CONTAGENS (Baseadas no DDL do Infosiga)
                 COALESCE(SAFE_CAST(qtd_automovel AS INT64), 0) as autos,
                 COALESCE(SAFE_CAST(qtd_motocicleta AS INT64), 0) as motos,
                 COALESCE(SAFE_CAST(qtd_pedestre AS INT64), 0) as pedestres,
@@ -134,12 +130,10 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
                 COALESCE(SAFE_CAST(qtd_onibus AS INT64), 0) as onibus,
                 COALESCE(SAFE_CAST(qtd_caminhao AS INT64), 0) as caminhoes,
                 COALESCE(SAFE_CAST(qtd_veic_outros AS INT64), 0) as outros,
-
                 ARRAY(
                     SELECT AS STRUCT 
                         marca_modelo as modelo, 
                         cor_veiculo as cor, 
-                        -- CORRIGIDO: Agora usamos o nome exato do DDL 'ano_fab'
                         CAST(ano_fab AS STRING) as ano_fab, 
                         tipo_veiculo as tipo
                     FROM `zecchin-analytica.infosiga_raw.raw_veiculos` v 
@@ -149,7 +143,6 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
                     SELECT AS STRUCT 
                         CAST(SAFE_CAST(p.idade AS FLOAT64) AS INT64) as idade, 
                         sexo, 
-                        -- CORRIGIDOS: Nomes exatos do DDL de pessoas
                         gravidade_lesao as lesao, 
                         profissao as profissao, 
                         tipo_de_vitima as tipo_vitima
@@ -161,7 +154,8 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
               AND {lat_f} BETWEEN -90 AND 90
               AND {lon_f} BETWEEN -180 AND 180
               AND ST_DISTANCE(SAFE.ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio_detalhe}
-            LIMIT 50000
+            LIMIT 500
+        """
     else:
         campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica" if tipo_crime == "veiculo" else f"{cfg['col_marca']} as marca, rubrica"
         query = f"""
