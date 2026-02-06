@@ -26,8 +26,8 @@ class _MapScreenState extends State<MapScreen> {
 
   // --- CONFIGURAÇÕES ---
   final String googleApiKey = "SUA_CHAVE_DA_API_AQUI";
-  final String baseUrl =
-      "https://zecchin-api-997663776889.southamerica-east1.run.app";
+  final String baseUrl = "http://localhost:8080";
+      //"https://zecchin-api-997663776889.southamerica-east1.run.app";
 
   Set<Marker> _markers = {};
   Set<Circle> _circles = {};

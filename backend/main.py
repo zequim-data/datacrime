@@ -9,7 +9,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 client = bigquery.Client(project='zecchin-analytica')
 
-# CONFIGURAÇÃO UNIFICADA - CRITÉRIO: col_data é a chave mestra
+# CONFIGURAÇÃO UNIFICADA - CRITÉRIO: col_data é a fonte da verdade
 CONFIG = {
     "celular": {
         "tabela": "zecchin-analytica.ssp_raw.raw_celulares_ssp",
@@ -31,75 +31,78 @@ CONFIG = {
     }
 }
 
-# QUERY TRACKER: Função para gerar a condição de ano de forma segura
+# QUERY TRACKER: Função para extrair o ano de qualquer formato de data
 def get_condicao_ano(filtro, col_data):
-    # Extrai YYYY da string de data (funciona para SSP e Infosiga)
+    # Transforma qualquer data em STRING e pega os 4 primeiros dígitos (YYYY)
     ano_sql = f"SUBSTR(CAST({col_data} AS STRING), 1, 4)"
     if filtro == "2025": return f"{ano_sql} = '2025'"
     if filtro == "3_anos": return f"{ano_sql} >= '2023'"
-    return f"{ano_sql} >= '2021'" # 5 anos ou padrão
+    return f"{ano_sql} >= '2021'"
 
 @app.get("/crimes")
 def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
-    print(f"\n--- [QUERY TRACKER: INÍCIO DA BUSCA] ---")
-    print(f"Parâmetros Recebidos: Tipo={tipo_crime}, Filtro={filtro}, Raio={raio}m")
+    print(f"\n--- [QUERY TRACKER: INÍCIO] ---")
+    print(f"Buscando: {tipo_crime} | Filtro: {filtro} | Raio: {raio}m")
     
-    if tipo_crime not in CONFIG:
-        print(f"ERRO: Categoria '{tipo_crime}' não mapeada no CONFIG!")
-        return {"data": []}
-    
+    if tipo_crime not in CONFIG: return {"data": []}
     cfg = CONFIG[tipo_crime]
     cond_ano = get_condicao_ano(filtro, cfg['col_data'])
     
-    # Tratamento geográfico universal
-    lat_f = f"SAFE_CAST(REPLACE(latitude, ',', '.') AS FLOAT64)"
-    lon_f = f"SAFE_CAST(REPLACE(longitude, ',', '.') AS FLOAT64)"
+    # ESCUDO GEOGRÁFICO: Trata vírgulas e limpa espaços
+    lat_f = f"SAFE_CAST(REPLACE(TRIM(latitude), ',', '.') AS FLOAT64)"
+    lon_f = f"SAFE_CAST(REPLACE(TRIM(longitude), ',', '.') AS FLOAT64)"
 
-    extra_campos = ""
+    # Adicionado severidade apenas para acidentes
+    extra = ""
     if tipo_crime == "acidente":
-        extra_campos = """, 
-            CASE 
-                WHEN COALESCE(SAFE_CAST(qtd_gravidade_fatal AS FLOAT64), 0) > 0 THEN 'FATAL' 
-                WHEN COALESCE(SAFE_CAST(qtd_gravidade_grave AS FLOAT64), 0) > 0 THEN 'GRAVE' 
-                ELSE 'LEVE' 
-            END as severidade"""
+        extra = """, CASE 
+            WHEN COALESCE(SAFE_CAST(qtd_gravidade_fatal AS FLOAT64), 0) > 0 THEN 'FATAL' 
+            WHEN COALESCE(SAFE_CAST(qtd_gravidade_grave AS FLOAT64), 0) > 0 THEN 'GRAVE' 
+            ELSE 'LEVE' END as severidade"""
 
     query = f"""
         SELECT 
             {lat_f} as lat, {lon_f} as lon, 
-            {cfg['col_marca']} as tipo, 1 as quantidade {extra_campos}
+            {cfg['col_marca']} as tipo, 1 as quantidade {extra}
         FROM `{cfg['tabela']}`
-        WHERE {lat_f} IS NOT NULL AND {cond_ano}
-          AND ST_DISTANCE(ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio}
+        WHERE {lat_f} BETWEEN -90 AND 90   -- FILTRO DE SEGURANÇA
+          AND {lon_f} BETWEEN -180 AND 180 -- FILTRO DE SEGURANÇA
+          AND {cond_ano}
+          -- SAFE.ST_GEOGPOINT evita o erro 400 se o dado for podre
+          AND ST_DISTANCE(SAFE.ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio}
         LIMIT 1000
     """
     
-    print(f"SQL EXECUTADA:\n{query}\n") # O seu Tracker de Query
+    print(f"SQL EXECUTADA:\n{query}\n") # Tracker de Query no Terminal
     
     try:
         df = client.query(query).to_dataframe().replace({np.nan: None})
-        results = df.to_dict(orient="records")
-        print(f"RESULTADO: {len(results)} registros encontrados.")
-        print(f"--- [QUERY TRACKER: FIM] ---\n")
-        return {"data": results}
+        return {"data": df.to_dict(orient="records")}
     except Exception as e:
-        print(f"ERRO CRÍTICO NO BIGQUERY: {e}")
+        print(f"ERRO BIGQUERY: {e}")
         return {"data": [], "error": str(e)}
 
 @app.get("/detalhes")
 def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
-    # Lógica simplificada para bater com o get_crimes
     cfg = CONFIG[tipo_crime]
     cond_ano = get_condicao_ano(filtro, cfg['col_data'])
     
-    campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica" if tipo_crime == "veiculo" else f"{cfg['col_marca']} as marca, 'OCORRÊNCIA' as rubrica"
+    lat_f = f"SAFE_CAST(REPLACE(latitude, ',', '.') AS FLOAT64)"
     
-    query = f"""
-        SELECT {campos}, CAST({cfg['col_data']} AS STRING) as data, COALESCE(logradouro, 'Endereço N/I') as local_texto
-        FROM `{cfg['tabela']}`
-        WHERE SAFE_CAST(REPLACE(latitude, ',', '.') AS FLOAT64) = {lat} AND {cond_ano}
-        LIMIT 50
-    """
+    if tipo_crime == "acidente":
+        # Detalhes ricos para acidentes (JOINs do Infosiga)
+        query = f"""
+            SELECT tp_sinistro_primario as rubrica, {cfg['col_data']} as data, logradouro as local_texto,
+            ARRAY(SELECT AS STRUCT marca_modelo as modelo, cor_veiculo as cor FROM `zecchin-analytica.infosiga_raw.raw_veiculos` v WHERE CAST(v.id_sinistro AS STRING) = CAST(t.id_sinistro AS STRING)) as lista_veiculos
+            FROM `{cfg['tabela']}` t WHERE {lat_f} = {lat} AND {cond_ano} LIMIT 50
+        """
+    else:
+        campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica" if tipo_crime == "veiculo" else f"{cfg['col_marca']} as marca, rubrica"
+        query = f"""
+            SELECT {campos}, CAST({cfg['col_data']} AS STRING) as data, COALESCE(logradouro, 'N/I') as local_texto
+            FROM `{cfg['tabela']}` WHERE {lat_f} = {lat} AND {cond_ano} LIMIT 50
+        """
+    
     df = client.query(query).to_dataframe().replace({np.nan: None})
     return {"data": df.to_dict(orient="records")}
 
