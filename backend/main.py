@@ -26,7 +26,7 @@ CONFIG = {
     "acidente": {
         "tabela": "zecchin-analytica.infosiga_raw.raw_sinistros",
         "col_marca": "tp_sinistro_primario",
-        "col_data": "data_sinistro",
+        "col_data": "ano_sinistro",
         "col_local": "logradouro"
     }
 }
@@ -70,7 +70,7 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
           AND {cond_ano}
           -- SAFE.ST_GEOGPOINT evita o erro 400 se o dado for podre
           AND ST_DISTANCE(SAFE.ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio}
-        LIMIT 1000
+        LIMIT 50000
     """
     
     print(f"SQL EXECUTADA:\n{query}\n") # Tracker de Query no Terminal
@@ -94,13 +94,13 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
         query = f"""
             SELECT tp_sinistro_primario as rubrica, {cfg['col_data']} as data, logradouro as local_texto,
             ARRAY(SELECT AS STRUCT marca_modelo as modelo, cor_veiculo as cor FROM `zecchin-analytica.infosiga_raw.raw_veiculos` v WHERE CAST(v.id_sinistro AS STRING) = CAST(t.id_sinistro AS STRING)) as lista_veiculos
-            FROM `{cfg['tabela']}` t WHERE {lat_f} = {lat} AND {cond_ano} LIMIT 50
+            FROM `{cfg['tabela']}` t WHERE {lat_f} = {lat} AND {cond_ano} LIMIT 500
         """
     else:
         campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica" if tipo_crime == "veiculo" else f"{cfg['col_marca']} as marca, rubrica"
         query = f"""
             SELECT {campos}, CAST({cfg['col_data']} AS STRING) as data, COALESCE(logradouro, 'N/I') as local_texto
-            FROM `{cfg['tabela']}` WHERE {lat_f} = {lat} AND {cond_ano} LIMIT 50
+            FROM `{cfg['tabela']}` WHERE {lat_f} = {lat} AND {cond_ano} LIMIT 500
         """
     
     df = client.query(query).to_dataframe().replace({np.nan: None})
