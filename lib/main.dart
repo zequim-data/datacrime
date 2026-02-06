@@ -25,9 +25,8 @@ class _MapScreenState extends State<MapScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   // --- CONFIGURAÇÕES ---
-  final String googleApiKey = "SUA_CHAVE_DA_API_AQUI";
-  final String baseUrl = "http://localhost:8080";
-      //"https://zecchin-api-997663776889.southamerica-east1.run.app";
+  final String googleApiKey = "AIzaSyDszIW2iBdyxbIo_NavRtpReKn8Lkrcbr8";
+  final String baseUrl = "https://zecchin-api-997663776889.southamerica-east1.run.app";
 
   Set<Marker> _markers = {};
   Set<Circle> _circles = {};
@@ -269,7 +268,7 @@ class _MapScreenState extends State<MapScreen> {
                       margin: const EdgeInsets.symmetric(vertical: 8),
                       child: ExpansionTile(
                         iconColor: themeColor,
-                        collapsedIconColor: Colors.white70,
+                        collapsedIconColor: Colors.white30,
                         title: Text("${c['rubrica'] ?? 'OCORRÊNCIA'}", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 13)),
                         subtitle: Text("${c['data'] ?? ''}", style: const TextStyle(color: Colors.white60, fontSize: 11)),
                         children: [
