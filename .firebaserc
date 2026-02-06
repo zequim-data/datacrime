@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "zecchin-analytica"
-  }
+  },
+  "targets": {
+    "zecchin-analytica": {
+      "hosting": {
+        "site-datacrime": [
+          "datacrime.web.app"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
