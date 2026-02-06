@@ -40,33 +40,36 @@ def sanitizar_dataframe(df):
     df = df.replace({np.nan: None})
     return df.to_dict(orient="records")
 
+def get_geo_sql(campo):
+    """Trata campos de coordenadas que podem vir como string com vírgula ou já como float."""
+    return f"SAFE_CAST(REPLACE(CAST({campo} AS STRING), ',', '.') AS FLOAT64)"
+
 def get_condicao_ano(filtro, col_filtro):
     """
     Gera a cláusula WHERE baseada no filtro selecionado.
-    Se a coluna for 'ano_sinistro', não usa SUBSTR.
+    Para 'ano_sinistro', tratamos como número para garantir que o filtro de range (>=) funcione.
     """
     if col_filtro == "ano_sinistro":
-        # Para acidentes, a coluna já é o ano (YYYY)
-        ano_sql = f"CAST({col_filtro} AS STRING)"
+        col_sql = f"SAFE_CAST({col_filtro} AS INT64)"
+        if filtro == "2025": return f"{col_sql} = 2025"
+        if filtro == "3_anos": return f"{col_sql} >= 2023"
+        if filtro == "5_anos": return f"{col_sql} >= 2021"
+        return f"{col_sql} >= 2021"
     else:
-        # Para celulares/veículos, extrai o ano da data completa (YYYY-MM-DD)
+        # Para colunas de data completa, extraímos os 4 primeiros caracteres (YYYY)
         ano_sql = f"SUBSTR(CAST({col_filtro} AS STRING), 1, 4)"
-    
-    if filtro == "2025": 
-        return f"{ano_sql} = '2025'"
-    if filtro == "3_anos": 
-        return f"{ano_sql} >= '2023'"
-    if filtro == "5_anos": 
+        if filtro == "2025": return f"{ano_sql} = '2025'"
+        if filtro == "3_anos": return f"{ano_sql} >= '2023'"
+        if filtro == "5_anos": return f"{ano_sql} >= '2021'"
         return f"{ano_sql} >= '2021'"
-    return f"{ano_sql} >= '2021'"
 
 @app.get("/crimes")
 def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
     if tipo_crime not in CONFIG: return {"data": []}
     cfg = CONFIG[tipo_crime]
     
-    lat_f = "SAFE_CAST(REPLACE(latitude, ',', '.') AS FLOAT64)"
-    lon_f = "SAFE_CAST(REPLACE(longitude, ',', '.') AS FLOAT64)"
+    lat_f = get_geo_sql("latitude")
+    lon_f = get_geo_sql("longitude")
     cond_ano = get_condicao_ano(filtro, cfg['col_filtro_ano'])
 
     extra_campos = ""
@@ -97,12 +100,12 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
     if tipo_crime not in CONFIG: return {"data": []}
     cfg = CONFIG[tipo_crime]
 
-    lat_f = "SAFE_CAST(REPLACE(latitude, ',', '.') AS FLOAT64)"
-    lon_f = "SAFE_CAST(REPLACE(longitude, ',', '.') AS FLOAT64)"
+    lat_f = get_geo_sql("latitude")
+    lon_f = get_geo_sql("longitude")
     cond_ano = get_condicao_ano(filtro, cfg['col_filtro_ano'])
 
     if tipo_crime == "acidente":
-        # Query completa para acidentes com contadores e sub-tabelas
+        # Melhoramos o JOIN usando CAST para INT64 para evitar erros de comparação de STRING
         query = f"""
             SELECT 
                 tp_sinistro_primario as rubrica,
@@ -118,7 +121,7 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
                         ano_fabricacao as ano_fab, 
                         tipo_veiculo as tipo
                     FROM `zecchin-analytica.infosiga_raw.raw_veiculos` v 
-                    WHERE CAST(v.id_sinistro AS STRING) = CAST(t.id_sinistro AS STRING)
+                    WHERE SAFE_CAST(v.id_sinistro AS INT64) = SAFE_CAST(t.id_sinistro AS INT64)
                 ) as lista_veiculos,
                 ARRAY(
                     SELECT AS STRUCT 
@@ -128,22 +131,21 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
                         descr_profissao as profissao, 
                         tp_envolvido as tipo_vitima
                     FROM `zecchin-analytica.infosiga_raw.raw_pessoas` p 
-                    WHERE CAST(p.id_sinistro AS STRING) = CAST(t.id_sinistro AS STRING)
+                    WHERE SAFE_CAST(p.id_sinistro AS INT64) = SAFE_CAST(t.id_sinistro AS INT64)
                 ) as lista_pessoas
             FROM `{cfg['tabela']}` t
             WHERE {cond_ano}
-              AND ST_DISTANCE(ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= 5
-            LIMIT 100
+              AND ST_DISTANCE(ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= 10
+            LIMIT 500
         """
     else:
-        # Query para Celulares e Veículos
         campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica" if tipo_crime == "veiculo" else f"{cfg['col_marca']} as marca, rubrica"
         query = f"""
             SELECT {campos}, CAST({cfg['col_exibicao_data']} AS STRING) as data, COALESCE({cfg['col_local']}, 'Endereço N/I') as local_texto
             FROM `{cfg['tabela']}`
             WHERE {cond_ano}
-              AND ST_DISTANCE(ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= 5
-            LIMIT 100
+              AND ST_DISTANCE(ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= 10
+            LIMIT 500
         """
 
     try:
