@@ -243,113 +243,74 @@ class _MapScreenState extends State<MapScreen> {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        maxChildSize: 0.95,
-        minChildSize: 0.4,
-        expand: false,
-        builder: (_, scroll) => Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(children: [
-            Container(
-                width: 40,
-                height: 5,
-                decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(10))),
-            const SizedBox(height: 15),
-            Text("${lista.length} REGISTROS AQUI",
-                style: TextStyle(
-                    color: themeColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16)),
-            Divider(color: themeColor, height: 25),
-            Expanded(
+      // --- AJUSTE AQUI: PointerInterceptor bloqueia o vazamento para o mapa ---
+      builder: (context) => PointerInterceptor(
+        child: DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          maxChildSize: 0.95,
+          minChildSize: 0.4,
+          expand: false,
+          builder: (_, scroll) => Container(
+            padding: const EdgeInsets.all(20),
+            child: Column(children: [
+              Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10))),
+              const SizedBox(height: 15),
+              Text("${lista.length} REGISTROS AQUI", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 16)),
+              Divider(color: themeColor, height: 25),
+              Expanded(
                 child: ListView.builder(
-              controller: scroll,
-              itemCount: lista.length,
-              itemBuilder: (context, i) {
-                final c = lista[i];
-                bool isAcidente = menuIndex == 2;
-                return Card(
-                  color: Colors.white.withOpacity(0.08),
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  child: ExpansionTile(
-                    iconColor: themeColor,
-                    collapsedIconColor: Colors.white70,
-                    title: Text("${c['rubrica'] ?? 'OCORRÊNCIA'}",
-                        style: TextStyle(
-                            color: themeColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13)),
-                    subtitle: Text("${c['data'] ?? ''}",
-                        style: const TextStyle(
-                            color: Colors.white60, fontSize: 11)),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(15),
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+                  controller: scroll,
+                  itemCount: lista.length,
+                  itemBuilder: (context, i) {
+                    final c = lista[i];
+                    bool isAcidente = menuIndex == 2;
+                    return Card(
+                      color: Colors.white.withOpacity(0.1),
+                      margin: const EdgeInsets.symmetric(vertical: 8),
+                      child: ExpansionTile(
+                        iconColor: themeColor,
+                        collapsedIconColor: Colors.white70,
+                        title: Text("${c['rubrica'] ?? 'OCORRÊNCIA'}", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                        subtitle: Text("${c['data'] ?? ''}", style: const TextStyle(color: Colors.white60, fontSize: 11)),
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(15),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               if (isAcidente) ...[
-                                Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceAround,
-                                    children: [
-                                      _iconStat(Icons.directions_car,
-                                          c['autos'], "Carros"),
-                                      _iconStat(Icons.two_wheeler, c['motos'],
-                                          "Motos"),
-                                      _iconStat(Icons.directions_walk,
-                                          c['pedestres'], "Pedestres"),
-                                    ]),
+                                Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+                                  _iconStat(Icons.directions_car, c['autos'], "Carros"),
+                                  _iconStat(Icons.two_wheeler, c['motos'], "Motos"),
+                                  _iconStat(Icons.directions_walk, c['pedestres'], "Pedestres"),
+                                ]),
                                 const SizedBox(height: 15),
-                                if (c['lista_veiculos'] != null &&
-                                    (c['lista_veiculos'] as List)
-                                        .isNotEmpty) ...[
-                                  Text("VEÍCULOS:",
-                                      style: TextStyle(
-                                          color: themeColor,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold)),
+                                if (c['lista_veiculos'] != null && (c['lista_veiculos'] as List).isNotEmpty) ...[
+                                  Text("VEÍCULOS:", style: TextStyle(color: themeColor, fontSize: 11, fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 5),
-                                  ...(c['lista_veiculos'] as List)
-                                      .map((v) => _cardVeiculo(v))
-                                      .toList(),
+                                  ...(c['lista_veiculos'] as List).map((v) => _cardVeiculo(v)).toList(),
                                   const SizedBox(height: 15),
                                 ],
-                                if (c['lista_pessoas'] != null &&
-                                    (c['lista_pessoas'] as List)
-                                        .isNotEmpty) ...[
-                                  Text("VÍTIMAS:",
-                                      style: TextStyle(
-                                          color: themeColor,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold)),
+                                if (c['lista_pessoas'] != null && (c['lista_pessoas'] as List).isNotEmpty) ...[
+                                  Text("VÍTIMAS:", style: TextStyle(color: themeColor, fontSize: 11, fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 5),
-                                  ...(c['lista_pessoas'] as List)
-                                      .map((p) => _cardPessoa(p))
-                                      .toList(),
+                                  ...(c['lista_pessoas'] as List).map((p) => _cardPessoa(p)).toList(),
                                 ],
-                                const Divider(
-                                    color: Colors.white24, height: 20),
+                                const Divider(color: Colors.white24, height: 20),
                                 _itemInfo("Local:", c['local_texto']),
                               ] else ...[
                                 _itemInfo("Marca:", c['marca']),
-                                if (menuIndex == 1) ...[
-                                  _itemInfo("Placa:", c['placa']),
-                                  _itemInfo("Cor:", c['cor']),
-                                ],
+                                if (menuIndex == 1) ...[ _itemInfo("Placa:", c['placa']), _itemInfo("Cor:", c['cor']), ],
                                 _itemInfo("Endereço:", c['local_texto']),
                               ]
                             ]),
-                      )
-                    ],
-                  ),
-                );
-              },
-            )),
-          ]),
+                          )
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ]),
+          ),
         ),
       ),
     );
@@ -575,7 +536,7 @@ class _MapScreenState extends State<MapScreen> {
                           border:
                               Border.all(color: themeColor.withOpacity(0.5))),
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text(menuIndex == 2 ? "TOP TIPOS" : "TOP MARCAS",
+                        Text(menuIndex == 2 ? "TOP OCORRÊNCIAS" : "TOP MARCAS",
                             style: TextStyle(
                                 color: themeColor,
                                 fontSize: 10,
