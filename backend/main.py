@@ -87,6 +87,7 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
     """
     
     try:
+        print(query)
         df = client.query(query).to_dataframe()
         return {"data": sanitizar_dataframe(df)}
     except Exception as e:

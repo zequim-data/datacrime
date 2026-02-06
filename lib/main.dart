@@ -316,7 +316,7 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _cardVeiculo(dynamic v) {
+Widget _cardVeiculo(dynamic v) {
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.all(8),
@@ -325,7 +325,8 @@ class _MapScreenState extends State<MapScreen> {
           borderRadius: BorderRadius.circular(5),
           border: Border(left: BorderSide(color: themeColor, width: 2))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text("${v['modelo'] ?? 'Modelo N/I'}",
+        // VOLTOU O ANO AQUI
+        Text("${v['modelo'] ?? 'Modelo N/I'} (${v['ano_fab'] ?? '-'})",
             style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
@@ -348,11 +349,12 @@ class _MapScreenState extends State<MapScreen> {
           borderRadius: BorderRadius.circular(5),
           border: Border(left: BorderSide(color: cor, width: 2))),
       child: Text(
-          "${p['tipo_vitima']} • ${p['sexo']} • ${p['idade'] ?? '-'} anos\n${p['lesao']}",
+          // VOLTOU A PROFISSÃO E FORMATAÇÃO MELHORADA
+          "${p['tipo_vitima']} • ${p['sexo']} • ${p['idade'] ?? '-'} anos\nLesão: ${p['lesao']} • Profissão: ${p['profissao'] ?? '-'}",
           style: const TextStyle(color: Colors.white, fontSize: 11)),
     );
   }
-
+  
   Widget _iconStat(IconData icon, dynamic count, String label) {
     int val = 0;
     if (count is int)
