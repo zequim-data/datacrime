@@ -276,11 +276,20 @@ class _MapScreenState extends State<MapScreen> {
                             padding: const EdgeInsets.all(15),
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               if (isAcidente) ...[
-                                Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                                  _iconStat(Icons.directions_car, c['autos'], "Carros"),
-                                  _iconStat(Icons.two_wheeler, c['motos'], "Motos"),
-                                  _iconStat(Icons.directions_walk, c['pedestres'], "Pedestres"),
-                                ]),
+                                    Wrap(
+                                        spacing: 15, // Espaço horizontal entre os ícones
+                                        runSpacing: 10, // Espaço vertical se pular linha
+                                        alignment: WrapAlignment.center,
+                                        children: [
+                                          _iconStat(Icons.directions_car, c['autos'], "Carros"),
+                                          _iconStat(Icons.two_wheeler, c['motos'], "Motos"),
+                                          _iconStat(Icons.directions_walk, c['pedestres'], "Pedestres"),
+                                          _iconStat(Icons.pedal_bike, c['bikes'], "Bikes"), // Novo
+                                          _iconStat(Icons.directions_bus, c['onibus'], "Ônibus"), // Novo
+                                          _iconStat(Icons.local_shipping, c['caminhoes'], "Caminhões"), // Novo
+                                          _iconStat(Icons.help_outline, c['outros'], "Outros"), // Novo
+                                        ],
+                                      ),
                                 const SizedBox(height: 15),
                                 if (c['lista_veiculos'] != null && (c['lista_veiculos'] as List).isNotEmpty) ...[
                                   Text("VEÍCULOS:", style: TextStyle(color: themeColor, fontSize: 11, fontWeight: FontWeight.bold)),
