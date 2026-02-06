@@ -46,7 +46,7 @@ def sanitizar_dataframe(df):
     return df.to_dict(orient="records")
 
 def get_geo_sql(campo):
-    """Trata campos de coordenadas (remove vírgulas)."""
+    """Trata campos de coordenadas."""
     return f"SAFE_CAST(REPLACE(CAST({campo} AS STRING), ',', '.') AS FLOAT64)"
 
 def get_condicao_ano(filtro, col_filtro):
@@ -114,20 +114,19 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
     lon_f = get_geo_sql("longitude")
     cond_ano = get_condicao_ano(filtro, cfg['col_filtro_ano'])
 
-    raio_detalhe = 50 
+    raio_detalhe = 2 
 
     if tipo_crime == "acidente":
         join_veiculos = "CAST(SAFE_CAST(v.id_sinistro AS FLOAT64) AS INT64) = CAST(SAFE_CAST(t.id_sinistro AS FLOAT64) AS INT64)"
         join_pessoas = "CAST(SAFE_CAST(p.id_sinistro AS FLOAT64) AS INT64) = CAST(SAFE_CAST(t.id_sinistro AS FLOAT64) AS INT64)"
 
-        # --- AQUI ESTÁ A CORREÇÃO DOS CAMPOS ---
         query = f"""
             SELECT 
                 tp_sinistro_primario as rubrica,
                 COALESCE({cfg['col_local']}, 'Local não informado') as local_texto,
                 CAST({cfg['col_exibicao_data']} AS STRING) as data,
                 
-                -- CAMPOS CORRIGIDOS E NOVOS TIPOS ADICIONADOS
+                -- CONTAGENS (Baseadas no DDL do Infosiga)
                 COALESCE(SAFE_CAST(qtd_automovel AS INT64), 0) as autos,
                 COALESCE(SAFE_CAST(qtd_motocicleta AS INT64), 0) as motos,
                 COALESCE(SAFE_CAST(qtd_pedestre AS INT64), 0) as pedestres,
@@ -140,7 +139,8 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
                     SELECT AS STRUCT 
                         marca_modelo as modelo, 
                         cor_veiculo as cor, 
-                        ano_fabricacao as ano_fab, 
+                        -- CORRIGIDO: Agora usamos o nome exato do DDL 'ano_fab'
+                        CAST(ano_fab AS STRING) as ano_fab, 
                         tipo_veiculo as tipo
                     FROM `zecchin-analytica.infosiga_raw.raw_veiculos` v 
                     WHERE {join_veiculos}
@@ -149,9 +149,10 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
                     SELECT AS STRUCT 
                         CAST(SAFE_CAST(p.idade AS FLOAT64) AS INT64) as idade, 
                         sexo, 
-                        descr_grau_lesao as lesao, 
-                        descr_profissao as profissao, 
-                        tp_envolvido as tipo_vitima
+                        -- CORRIGIDOS: Nomes exatos do DDL de pessoas
+                        gravidade_lesao as lesao, 
+                        profissao as profissao, 
+                        tipo_de_vitima as tipo_vitima
                     FROM `zecchin-analytica.infosiga_raw.raw_pessoas` p 
                     WHERE {join_pessoas}
                 ) as lista_pessoas
@@ -160,8 +161,7 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
               AND {lat_f} BETWEEN -90 AND 90
               AND {lon_f} BETWEEN -180 AND 180
               AND ST_DISTANCE(SAFE.ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio_detalhe}
-            LIMIT 50
-        """
+            LIMIT 50000
     else:
         campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica" if tipo_crime == "veiculo" else f"{cfg['col_marca']} as marca, rubrica"
         query = f"""
@@ -170,7 +170,7 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
             WHERE {cond_ano}
               AND {lat_f} BETWEEN -90 AND 90 
               AND ST_DISTANCE(SAFE.ST_GEOGPOINT({lon_f}, {lat_f}), ST_GEOGPOINT({lon}, {lat})) <= {raio_detalhe}
-            LIMIT 50
+            LIMIT 500
         """
 
     query_oneline = query.replace('\n', ' ').replace('   ', ' ')
