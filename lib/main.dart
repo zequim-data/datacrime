@@ -582,7 +582,7 @@ Widget _cardVeiculo(dynamic v) {
                             // --- ADICIONE ESTE BLOCO NO FINAL DA LISTA ---
                                 const Divider(color: Colors.white24, height: 15),
                                 const Text(
-                                  "Toque nos ícones para detalhes", 
+                                  "Toque em cada ocorrência no mapa para detalhes completos", 
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     color: Colors.white54, 
