@@ -63,7 +63,7 @@ class _MapScreenState extends State<MapScreen> {
     FocusScope.of(context).unfocus();
 
     final url = Uri.parse(
-        "https://maps.googleapis.com/maps/api/geocode/json?address=$endereco&key=$googleApiKey");
+        "https://maps.googleapis.com/maps/api/geocode/json?address=$endereco&components=country:BR|administrative_area:SP&key=$googleApiKey");
 
     try {
       final response = await http.get(url);
