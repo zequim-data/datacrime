@@ -526,10 +526,13 @@ Widget _cardVeiculo(dynamic v) {
         Positioned(
             bottom: 20,
             left: 15,
-            child: FloatingActionButton(
-                backgroundColor: themeColor,
-                onPressed: _gps,
-                child: const Icon(Icons.my_location, color: Colors.black))),
+            // ADICIONE ESTA LINHA: _bloqueioMapa
+            child: _bloqueioMapa(
+              child: FloatingActionButton(
+                  backgroundColor: themeColor,
+                  onPressed: _gps,
+                  child: const Icon(Icons.my_location, color: Colors.black)),
+            )),
 
         // --- 3. ESTATÍSTICAS (BLINDADAS) ---
         if (estatisticasMarcas.isNotEmpty)
