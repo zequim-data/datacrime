@@ -577,7 +577,20 @@ Widget _cardVeiculo(dynamic v) {
                                               fontWeight: FontWeight.bold,
                                               fontSize: 10))
                                     ])))
-                            .toList()
+                            .toList(),
+
+                            // --- ADICIONE ESTE BLOCO NO FINAL DA LISTA ---
+                                const Divider(color: Colors.white24, height: 15),
+                                const Text(
+                                  "Toque nos ícones para detalhes", 
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.white54, 
+                                    fontSize: 9, 
+                                    fontStyle: FontStyle.italic
+                                  ),
+                                )
+                                // ---------------------------------------------
                       ])))),
 
         if (carregando)
