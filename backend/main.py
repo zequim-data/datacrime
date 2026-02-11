@@ -62,7 +62,7 @@ def get_geo_sql(campo):
     return f"SAFE_CAST(REPLACE(CAST({campo} AS STRING), ',', '.') AS FLOAT64)"
 
 def get_condicao_ano(filtro, col_filtro):
-    """Ghera a cláusula WHERE."""
+    """Gera a cláusula WHERE."""
     if col_filtro == "ano_sinistro":
         col_sql = f"CAST(SAFE_CAST({col_filtro} AS FLOAT64) AS INT64)"
         if filtro == "2025": return f"{col_sql} = 2025"
