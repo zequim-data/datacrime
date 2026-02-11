@@ -333,7 +333,7 @@ Widget _cardVeiculo(dynamic v) {
           borderRadius: BorderRadius.circular(5),
           border: Border(left: BorderSide(color: themeColor, width: 2))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // VOLTOU O ANO AQUI
+        // VOLTOU O ANO AQUI _MOE
         Text("${v['modelo'] ?? 'Modelo N/I'} (${v['ano_fab'] ?? '-'})",
             style: const TextStyle(
                 color: Colors.white,
