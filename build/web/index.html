@@ -4,19 +4,34 @@
   <base href="/">
   <meta charset="UTF-8">
   <title>Datacrime - Zecchin Analytica</title>
-  
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDj2xClrlZVaLGs1H-m6XPNsLEhMbZ64Vw"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <script>
+    // 1. Limpa cache antigo para evitar loops
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        for(let reg of regs) reg.unregister();
+      });
+    }
+    // 2. Força renderizador estável (CanvasKit)
+    window.flutterConfiguration = {
+      renderer: "canvaskit"
+    };
+  </script>
+
+  <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDj2xClrlZVaLGs1H-m6XPNsLEhMbZ64Vw&loading=async"></script>
 
   <style>
     body { background-color: #000; margin: 0; padding: 0; overflow: hidden; }
     .loading {
       display: flex; justify-content: center; align-items: center;
       height: 100vh; color: #00FFFF; font-family: monospace; font-size: 20px;
+      text-transform: uppercase;
     }
   </style>
 </head>
 <body>
-  <div id="loading" class="loading">INICIALIZANDO MOTOR...</div>
+  <div id="loading" class="loading">Iniciando Sistema...</div>
   
   <script src="flutter_bootstrap.js" async></script>
 </body>
