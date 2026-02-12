@@ -3,17 +3,15 @@
 <head>
   <base href="/">
   <meta charset="UTF-8">
-  <title>Datacrime - Zecchin Analytica</title>
+  <title>Zecchin Analytica</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="manifest" href="manifest.json">
 
   <script>
-    // 1. Limpa cache antigo para evitar loops
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then((regs) => {
-        for(let reg of regs) reg.unregister();
-      });
-    }
-    // 2. Força renderizador estável (CanvasKit)
+    // Configura o Flutter para ignorar WASM e usar apenas CanvasKit (JS)
+    // Isso evita o erro de JSON.parse em arquivos .wasm não encontrados
     window.flutterConfiguration = {
       renderer: "canvaskit"
     };
@@ -25,13 +23,14 @@
     body { background-color: #000; margin: 0; padding: 0; overflow: hidden; }
     .loading {
       display: flex; justify-content: center; align-items: center;
-      height: 100vh; color: #00FFFF; font-family: monospace; font-size: 20px;
-      text-transform: uppercase;
+      height: 100vh; color: #00FFFF; font-family: monospace; font-size: 24px;
+      animation: pulse 1s infinite;
     }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
   </style>
 </head>
 <body>
-  <div id="loading" class="loading">Iniciando Sistema...</div>
+  <div class="loading">INICIALIZANDO SISTEMA...</div>
   
   <script src="flutter_bootstrap.js" async></script>
 </body>

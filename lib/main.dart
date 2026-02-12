@@ -8,10 +8,42 @@ import 'package:geolocator/geolocator.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'dart:convert';
 
-void main() => runApp(const MaterialApp(
+// --- MUDANÇA AQUI: Captura de Erro Global ---
+void main() {
+  // Garante que o binding esteja pronto antes de qualquer coisa
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Executa o app dentro de uma Zona Segura de Erros
+  runZonedGuarded(() {
+    runApp(const MaterialApp(
       home: MapScreen(),
       debugShowCheckedModeBanner: false,
     ));
+  }, (error, stackTrace) {
+    // SE O APP QUEBRAR, ISSO VAI APARECER:
+    print("ERRO CRÍTICO CAPTURADO: $error");
+
+    // Tenta desenhar uma tela de erro de emergência
+    runApp(MaterialApp(
+      home: Scaffold(
+        backgroundColor: Colors.red.shade900,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: SingleChildScrollView(
+              child: Text(
+                "FALHA NO APP:\n$error\n\n$stackTrace",
+                style:
+                    const TextStyle(color: Colors.white, fontFamily: 'Courier'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ));
+  });
+}
+// --- FIM
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -26,7 +58,8 @@ class _MapScreenState extends State<MapScreen> {
 
   // --- CONFIGURAÇÕES ---
   final String googleApiKey = "AIzaSyDszIW2iBdyxbIo_NavRtpReKn8Lkrcbr8";
-  final String baseUrl = "https://zecchin-api-997663776889.southamerica-east1.run.app";
+  final String baseUrl =
+      "https://zecchin-api-997663776889.southamerica-east1.run.app";
 
   Set<Marker> _markers = {};
   Set<Circle> _circles = {};
@@ -250,9 +283,18 @@ class _MapScreenState extends State<MapScreen> {
           builder: (_, scroll) => Container(
             padding: const EdgeInsets.all(20),
             child: Column(children: [
-              Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10))),
+              Container(
+                  width: 40,
+                  height: 5,
+                  decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(10))),
               const SizedBox(height: 15),
-              Text("${lista.length} REGISTROS AQUI", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 16)),
+              Text("${lista.length} REGISTROS AQUI",
+                  style: TextStyle(
+                      color: themeColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16)),
               Divider(color: themeColor, height: 25),
               Expanded(
                 child: ListView.builder(
@@ -269,53 +311,89 @@ class _MapScreenState extends State<MapScreen> {
                       child: ExpansionTile(
                         iconColor: themeColor,
                         collapsedIconColor: Colors.white30,
-                        title: Text("${c['rubrica'] ?? 'OCORRÊNCIA'}", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 13)),
-                        subtitle: Text("${c['data'] ?? ''}", style: const TextStyle(color: Colors.white60, fontSize: 11)),
+                        title: Text("${c['rubrica'] ?? 'OCORRÊNCIA'}",
+                            style: TextStyle(
+                                color: themeColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13)),
+                        subtitle: Text("${c['data'] ?? ''}",
+                            style: const TextStyle(
+                                color: Colors.white60, fontSize: 11)),
                         children: [
                           Padding(
                             padding: const EdgeInsets.all(15),
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              if (isAcidente) ...[
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (isAcidente) ...[
                                     Wrap(
-                                        spacing: 15,
-                                        runSpacing: 10,
-                                        alignment: WrapAlignment.center,
-                                        children: [
-                                          _iconStat(Icons.directions_car, c['autos'], "Carros"),
-                                          _iconStat(Icons.two_wheeler, c['motos'], "Motos"),
-                                          _iconStat(Icons.directions_walk, c['pedestres'], "Pedestres"),
-                                          _iconStat(Icons.pedal_bike, c['bikes'], "Bikes"),
-                                          _iconStat(Icons.directions_bus, c['onibus'], "Ônibus"),
-                                          _iconStat(Icons.local_shipping, c['caminhoes'], "Caminhões"),
-                                          _iconStat(Icons.help_outline, c['outros'], "Outros"),
-                                        ],
-                                      ),
-                                const SizedBox(height: 15),
-                                if (c['lista_veiculos'] != null && (c['lista_veiculos'] as List).isNotEmpty) ...[
-                                  Text("VEÍCULOS:", style: TextStyle(color: themeColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 5),
-                                  ...(c['lista_veiculos'] as List).map((v) => _cardVeiculo(v)).toList(),
-                                  const SizedBox(height: 15),
-                                ],
-                                if (c['lista_pessoas'] != null && (c['lista_pessoas'] as List).isNotEmpty) ...[
-                                  Text("VÍTIMAS:", style: TextStyle(color: themeColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 5),
-                                  ...(c['lista_pessoas'] as List).map((p) => _cardPessoa(p)).toList(),
-                                ],
-                                const Divider(color: Colors.white24, height: 20),
-                                _itemInfo("Local:", c['local_texto']),
-                              ] else ...[
-                                // Lógica para Celular, Veículo e Criminal
-                                if (isCriminal)
-                                  _itemInfo("Natureza:", c['marca']) // 'marca' aqui contém 'natureza_apurada'
-                                else
-                                  _itemInfo("Marca:", c['marca']),
-                                
-                                if (menuIndex == 1) ...[ _itemInfo("Placa:", c['placa']), _itemInfo("Cor:", c['cor']), ],
-                                
-                                _itemInfo("Endereço:", c['local_texto']),
-                              ]
-                            ]),
+                                      spacing: 15,
+                                      runSpacing: 10,
+                                      alignment: WrapAlignment.center,
+                                      children: [
+                                        _iconStat(Icons.directions_car,
+                                            c['autos'], "Carros"),
+                                        _iconStat(Icons.two_wheeler, c['motos'],
+                                            "Motos"),
+                                        _iconStat(Icons.directions_walk,
+                                            c['pedestres'], "Pedestres"),
+                                        _iconStat(Icons.pedal_bike, c['bikes'],
+                                            "Bikes"),
+                                        _iconStat(Icons.directions_bus,
+                                            c['onibus'], "Ônibus"),
+                                        _iconStat(Icons.local_shipping,
+                                            c['caminhoes'], "Caminhões"),
+                                        _iconStat(Icons.help_outline,
+                                            c['outros'], "Outros"),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 15),
+                                    if (c['lista_veiculos'] != null &&
+                                        (c['lista_veiculos'] as List)
+                                            .isNotEmpty) ...[
+                                      Text("VEÍCULOS:",
+                                          style: TextStyle(
+                                              color: themeColor,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold)),
+                                      const SizedBox(height: 5),
+                                      ...(c['lista_veiculos'] as List)
+                                          .map((v) => _cardVeiculo(v))
+                                          .toList(),
+                                      const SizedBox(height: 15),
+                                    ],
+                                    if (c['lista_pessoas'] != null &&
+                                        (c['lista_pessoas'] as List)
+                                            .isNotEmpty) ...[
+                                      Text("VÍTIMAS:",
+                                          style: TextStyle(
+                                              color: themeColor,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold)),
+                                      const SizedBox(height: 5),
+                                      ...(c['lista_pessoas'] as List)
+                                          .map((p) => _cardPessoa(p))
+                                          .toList(),
+                                    ],
+                                    const Divider(
+                                        color: Colors.white24, height: 20),
+                                    _itemInfo("Local:", c['local_texto']),
+                                  ] else ...[
+                                    // Lógica para Celular, Veículo e Criminal
+                                    if (isCriminal)
+                                      _itemInfo("Natureza:",
+                                          c['marca']) // 'marca' aqui contém 'natureza_apurada'
+                                    else
+                                      _itemInfo("Marca:", c['marca']),
+
+                                    if (menuIndex == 1) ...[
+                                      _itemInfo("Placa:", c['placa']),
+                                      _itemInfo("Cor:", c['cor']),
+                                    ],
+
+                                    _itemInfo("Endereço:", c['local_texto']),
+                                  ]
+                                ]),
                           )
                         ],
                       ),
@@ -366,7 +444,7 @@ class _MapScreenState extends State<MapScreen> {
           style: const TextStyle(color: Colors.white, fontSize: 11)),
     );
   }
-  
+
   Widget _iconStat(IconData icon, dynamic count, String label) {
     int val = 0;
     if (count is int)
@@ -555,9 +633,12 @@ class _MapScreenState extends State<MapScreen> {
                               Border.all(color: themeColor.withOpacity(0.5))),
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
                         Text(
-                          menuIndex == 2 ? "TOP OCORRÊNCIAS" : 
-                          menuIndex == 3 ? "TOP NATUREZAS" : "TOP MARCAS",
-                          style: TextStyle(
+                            menuIndex == 2
+                                ? "TOP OCORRÊNCIAS"
+                                : menuIndex == 3
+                                    ? "TOP NATUREZAS"
+                                    : "TOP MARCAS",
+                            style: TextStyle(
                                 color: themeColor,
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold)),
@@ -585,16 +666,15 @@ class _MapScreenState extends State<MapScreen> {
                                               fontSize: 10))
                                     ])))
                             .toList(),
-                            const Divider(color: Colors.white24, height: 15),
-                            const Text(
-                              "Toque nos ícones para detalhes", 
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.white54, 
-                                fontSize: 9, 
-                                fontStyle: FontStyle.italic
-                              ),
-                            )
+                        const Divider(color: Colors.white24, height: 15),
+                        const Text(
+                          "Toque nos ícones para detalhes",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 9,
+                              fontStyle: FontStyle.italic),
+                        )
                       ])))),
 
         if (carregando)
