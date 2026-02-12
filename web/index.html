@@ -3,27 +3,35 @@
 <head>
   <base href="/">
   <meta charset="UTF-8">
-  <title>Teste Datacrime</title>
+  <title>Zecchin Analytica</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="manifest" href="manifest.json">
   
-  <style>
-    body { background-color: #333; color: #0f0; font-family: monospace; padding: 20px; }
-  </style>
-</head>
-<body>
-  <h3>DIAGNÓSTICO DE BOOT</h3>
-  <div id="log">Iniciando...</div>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="manifest" href="manifest.json">
 
   <script>
-    function log(msg) { document.getElementById('log').innerText += '\n' + msg; }
-    
-    // Configuração explícita para ajudar o Flutter 3.41
     window.flutterConfiguration = {
-      canvasKitBaseUrl: "/canvaskit/" 
+      canvasKitBaseUrl: "/canvaskit/"
     };
   </script>
 
+  <script 
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDj2xClrlZVaLGs1H-m6XPNsLEhMbZ64Vw&loading=async&libraries=geometry"
+    async 
+    defer>
+  </script>
+
+  <style>
+    body { background-color: #000; margin: 0; padding: 0; overflow: hidden; }
+    .loading {
+      display: flex; justify-content: center; align-items: center;
+      height: 100vh; color: #00FFFF; font-family: monospace; font-size: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div class="loading">CARREGANDO SISTEMA...</div>
+  
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

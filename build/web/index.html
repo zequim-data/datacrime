@@ -10,27 +10,27 @@
   <link rel="manifest" href="manifest.json">
 
   <script>
-    // Configura o Flutter para ignorar WASM e usar apenas CanvasKit (JS)
-    // Isso evita o erro de JSON.parse em arquivos .wasm não encontrados
     window.flutterConfiguration = {
-      renderer: "canvaskit"
+      canvasKitBaseUrl: "/canvaskit/"
     };
   </script>
 
-  <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDj2xClrlZVaLGs1H-m6XPNsLEhMbZ64Vw&loading=async"></script>
+  <script 
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDj2xClrlZVaLGs1H-m6XPNsLEhMbZ64Vw&loading=async&libraries=geometry"
+    async 
+    defer>
+  </script>
 
   <style>
     body { background-color: #000; margin: 0; padding: 0; overflow: hidden; }
     .loading {
       display: flex; justify-content: center; align-items: center;
       height: 100vh; color: #00FFFF; font-family: monospace; font-size: 24px;
-      animation: pulse 1s infinite;
     }
-    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
   </style>
 </head>
 <body>
-  <div class="loading">INICIALIZANDO SISTEMA...</div>
+  <div class="loading">CARREGANDO SISTEMA...</div>
   
   <script src="flutter_bootstrap.js" async></script>
 </body>
