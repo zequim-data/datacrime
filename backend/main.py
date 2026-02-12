@@ -5,7 +5,7 @@ import uvicorn
 import pandas as pd
 import numpy as np
 import logging
-import json # <--- IMPORTANTE: Adicionado para a nova sanitização
+import json
 
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO)
@@ -17,6 +17,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 client = bigquery.Client(project='zecchin-analytica')
 
 # CONFIGURAÇÃO: Mapeamento de tabelas e colunas
+# ATUALIZADO: Incluída a chave "criminal"
 CONFIG = {
     "celular": {
         "tabela": "zecchin-analytica.ssp_raw.raw_celulares_ssp",
@@ -38,19 +39,23 @@ CONFIG = {
         "col_filtro_ano": "ano_sinistro", 
         "col_exibicao_data": "data_sinistro",
         "col_local": "logradouro"
+    },
+    "criminal": {
+        "tabela": "zecchin-analytica.ssp_raw.raw_dados_criminais_ssp",
+        "col_marca": "natureza_apurada", # Usado para o Top Stats
+        "col_filtro_ano": "data_ocorrencia_bo",
+        "col_exibicao_data": "data_ocorrencia_bo",
+        "col_local": "logradouro"
     }
 }
 
 def sanitizar_dataframe(df):
     """
     Converte o DataFrame para uma lista de dicionários Python puros.
-    Usa to_json() primeiro para garantir que tipos complexos (NumPy, Arrays, Datas)
-    sejam convertidos corretamente para padrões web, evitando erros 500 no FastAPI.
     """
     try:
         if df.empty:
             return []
-        # Converte para JSON string (padrão ISO para datas) e carrega de volta como dict puro
         json_str = df.to_json(orient="records", date_format="iso")
         return json.loads(json_str)
     except Exception as e:
@@ -58,7 +63,7 @@ def sanitizar_dataframe(df):
         return []
 
 def get_geo_sql(campo):
-    """Trata campos de coordenadas."""
+    """Trata campos de coordenadas (String ou Float)."""
     return f"SAFE_CAST(REPLACE(CAST({campo} AS STRING), ',', '.') AS FLOAT64)"
 
 def get_condicao_ano(filtro, col_filtro):
@@ -70,6 +75,7 @@ def get_condicao_ano(filtro, col_filtro):
         if filtro == "5_anos": return f"{col_sql} >= 2021"
         return f"{col_sql} >= 2021"
     else:
+        # Pega os primeiros 4 digitos da string de data (YYYY)
         ano_sql = f"SUBSTR(CAST({col_filtro} AS STRING), 1, 4)"
         if filtro == "2025": return f"{ano_sql} = '2025'"
         if filtro == "3_anos": return f"{ano_sql} >= '2023'"
@@ -94,6 +100,7 @@ def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
                 ELSE 'LEVE' 
             END as severidade"""
 
+    # Alias 'tipo' é usado para o agrupamento no frontend
     query = f"""
         SELECT {lat_f} as lat, {lon_f} as lon, {cfg['col_marca']} as tipo, 1 as quantidade {extra_campos}
         FROM `{cfg['tabela']}`
@@ -169,7 +176,15 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
             LIMIT 50
         """
     else:
-        campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica" if tipo_crime == "veiculo" else f"{cfg['col_marca']} as marca, rubrica"
+        # Lógica genérica (Celular, Veiculo, Criminal)
+        # Se for Veiculo, pega placa e cor. Se não, usa lógica padrão.
+        if tipo_crime == "veiculo":
+            campos = "descr_marca_veiculo as marca, placa_veiculo as placa, descr_cor_veiculo as cor, rubrica"
+        else:
+            # Para 'celular' ou 'criminal'
+            # No caso 'criminal', col_marca = 'natureza_apurada', então retorna 'natureza_apurada as marca'
+            campos = f"{cfg['col_marca']} as marca, rubrica"
+
         query = f"""
             SELECT {campos}, CAST({cfg['col_exibicao_data']} AS STRING) as data, COALESCE({cfg['col_local']}, 'Endereço N/I') as local_texto
             FROM `{cfg['tabela']}`

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
-import 'package:pointer_interceptor/pointer_interceptor.dart'; // <--- OBRIGATÓRIO
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'dart:convert';
 
 void main() => runApp(const MaterialApp(
@@ -34,7 +34,7 @@ class _MapScreenState extends State<MapScreen> {
 
   double raioBusca = 300.0;
   String filtroAno = "2025";
-  int menuIndex = 0;
+  int menuIndex = 0; // 0: Celular, 1: Veiculo, 2: Acidente, 3: Criminal
 
   Map<String, int> estatisticasMarcas = {};
   bool carregando = false;
@@ -42,17 +42,16 @@ class _MapScreenState extends State<MapScreen> {
   String get tipoCrimeParam {
     if (menuIndex == 0) return "celular";
     if (menuIndex == 1) return "veiculo";
-    return "acidente";
+    if (menuIndex == 2) return "acidente";
+    return "criminal"; // Nova aba
   }
 
-  // Laranja Neon (Bem visível)
+  // Laranja Neon (Padrão visual)
   Color get themeColor => Colors.orangeAccent;
 
-  // --- O ESCUDO (Bloqueia o clique de passar pro mapa) ---
   Widget _bloqueioMapa({required Widget child}) {
     return PointerInterceptor(
       child: child,
-      // debug: true, // <--- Descomente isso se quiser ver uma caixa verde onde o bloqueio está
     );
   }
 
@@ -146,8 +145,7 @@ class _MapScreenState extends State<MapScreen> {
     try {
       final String linkReq =
           '$baseUrl/crimes?lat=${pos.latitude}&lon=${pos.longitude}&raio=${raioBusca.toInt()}&filtro=$filtroAno&tipo_crime=$tipoCrimeParam';
-      print(
-          "🔍 DEBUG LINK: $linkReq"); // <--- OLHE NO CONSOLE DO NAVEGADOR (F12)
+      print("🔍 DEBUG LINK: $linkReq");
 
       final response = await http.get(Uri.parse(linkReq));
 
@@ -190,6 +188,7 @@ class _MapScreenState extends State<MapScreen> {
           String sev = dados['severidade'] ?? 'LEVE';
           if (sev == 'FATAL') corMarker = Colors.red[900]!;
         }
+        // Poderia customizar a cor para 'criminal' (índice 3) aqui se quisesse
 
         BitmapDescriptor icon =
             await _criarIconeCustomizado("$totalCluster", corMarker);
@@ -242,7 +241,6 @@ class _MapScreenState extends State<MapScreen> {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-      // --- AJUSTE AQUI: PointerInterceptor bloqueia o vazamento para o mapa ---
       builder: (context) => PointerInterceptor(
         child: DraggableScrollableSheet(
           initialChildSize: 0.6,
@@ -263,6 +261,8 @@ class _MapScreenState extends State<MapScreen> {
                   itemBuilder: (context, i) {
                     final c = lista[i];
                     bool isAcidente = menuIndex == 2;
+                    bool isCriminal = menuIndex == 3;
+
                     return Card(
                       color: Colors.white.withOpacity(0.1),
                       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -277,17 +277,17 @@ class _MapScreenState extends State<MapScreen> {
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               if (isAcidente) ...[
                                     Wrap(
-                                        spacing: 15, // Espaço horizontal entre os ícones
-                                        runSpacing: 10, // Espaço vertical se pular linha
+                                        spacing: 15,
+                                        runSpacing: 10,
                                         alignment: WrapAlignment.center,
                                         children: [
                                           _iconStat(Icons.directions_car, c['autos'], "Carros"),
                                           _iconStat(Icons.two_wheeler, c['motos'], "Motos"),
                                           _iconStat(Icons.directions_walk, c['pedestres'], "Pedestres"),
-                                          _iconStat(Icons.pedal_bike, c['bikes'], "Bikes"), // Novo
-                                          _iconStat(Icons.directions_bus, c['onibus'], "Ônibus"), // Novo
-                                          _iconStat(Icons.local_shipping, c['caminhoes'], "Caminhões"), // Novo
-                                          _iconStat(Icons.help_outline, c['outros'], "Outros"), // Novo
+                                          _iconStat(Icons.pedal_bike, c['bikes'], "Bikes"),
+                                          _iconStat(Icons.directions_bus, c['onibus'], "Ônibus"),
+                                          _iconStat(Icons.local_shipping, c['caminhoes'], "Caminhões"),
+                                          _iconStat(Icons.help_outline, c['outros'], "Outros"),
                                         ],
                                       ),
                                 const SizedBox(height: 15),
@@ -305,8 +305,14 @@ class _MapScreenState extends State<MapScreen> {
                                 const Divider(color: Colors.white24, height: 20),
                                 _itemInfo("Local:", c['local_texto']),
                               ] else ...[
-                                _itemInfo("Marca:", c['marca']),
+                                // Lógica para Celular, Veículo e Criminal
+                                if (isCriminal)
+                                  _itemInfo("Natureza:", c['marca']) // 'marca' aqui contém 'natureza_apurada'
+                                else
+                                  _itemInfo("Marca:", c['marca']),
+                                
                                 if (menuIndex == 1) ...[ _itemInfo("Placa:", c['placa']), _itemInfo("Cor:", c['cor']), ],
+                                
                                 _itemInfo("Endereço:", c['local_texto']),
                               ]
                             ]),
@@ -324,7 +330,7 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-Widget _cardVeiculo(dynamic v) {
+  Widget _cardVeiculo(dynamic v) {
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.all(8),
@@ -333,7 +339,6 @@ Widget _cardVeiculo(dynamic v) {
           borderRadius: BorderRadius.circular(5),
           border: Border(left: BorderSide(color: themeColor, width: 2))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // VOLTOU O ANO AQUI
         Text("${v['modelo'] ?? 'Modelo N/I'} (${v['ano_fab'] ?? '-'})",
             style: const TextStyle(
                 color: Colors.white,
@@ -357,7 +362,6 @@ Widget _cardVeiculo(dynamic v) {
           borderRadius: BorderRadius.circular(5),
           border: Border(left: BorderSide(color: cor, width: 2))),
       child: Text(
-          // VOLTOU A PROFISSÃO E FORMATAÇÃO MELHORADA
           "${p['tipo_vitima']} • ${p['sexo']} • ${p['idade'] ?? '-'} anos\nLesão: ${p['lesao']} • Profissão: ${p['profissao'] ?? '-'}",
           style: const TextStyle(color: Colors.white, fontSize: 11)),
     );
@@ -431,6 +435,8 @@ Widget _cardVeiculo(dynamic v) {
               icon: Icon(Icons.directions_car), label: "Veículos"),
           BottomNavigationBarItem(
               icon: Icon(Icons.warning_amber), label: "Acidentes"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.local_police), label: "Polícia"), // Novo Item
         ],
       ),
       body: Stack(children: [
@@ -526,7 +532,6 @@ Widget _cardVeiculo(dynamic v) {
         Positioned(
             bottom: 20,
             left: 15,
-            // ADICIONE ESTA LINHA: _bloqueioMapa
             child: _bloqueioMapa(
               child: FloatingActionButton(
                   backgroundColor: themeColor,
@@ -549,8 +554,10 @@ Widget _cardVeiculo(dynamic v) {
                           border:
                               Border.all(color: themeColor.withOpacity(0.5))),
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text(menuIndex == 2 ? "TOP OCORRÊNCIAS" : "TOP MARCAS",
-                            style: TextStyle(
+                        Text(
+                          menuIndex == 2 ? "TOP OCORRÊNCIAS" : 
+                          menuIndex == 3 ? "TOP NATUREZAS" : "TOP MARCAS",
+                          style: TextStyle(
                                 color: themeColor,
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold)),
@@ -578,19 +585,16 @@ Widget _cardVeiculo(dynamic v) {
                                               fontSize: 10))
                                     ])))
                             .toList(),
-
-                            // --- ADICIONE ESTE BLOCO NO FINAL DA LISTA ---
-                                const Divider(color: Colors.white24, height: 15),
-                                const Text(
-                                  "Toque nos ícones para detalhes", 
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Colors.white54, 
-                                    fontSize: 9, 
-                                    fontStyle: FontStyle.italic
-                                  ),
-                                )
-                                // ---------------------------------------------
+                            const Divider(color: Colors.white24, height: 15),
+                            const Text(
+                              "Toque nos ícones para detalhes", 
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white54, 
+                                fontSize: 9, 
+                                fontStyle: FontStyle.italic
+                              ),
+                            )
                       ])))),
 
         if (carregando)
