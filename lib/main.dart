@@ -8,22 +8,15 @@ import 'package:geolocator/geolocator.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'dart:convert';
 
-// --- MUDANÇA AQUI: Captura de Erro Global ---
 void main() {
-  // Garante que o binding esteja pronto antes de qualquer coisa
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Executa o app dentro de uma Zona Segura de Erros
   runZonedGuarded(() {
     runApp(const MaterialApp(
       home: MapScreen(),
       debugShowCheckedModeBanner: false,
     ));
   }, (error, stackTrace) {
-    // SE O APP QUEBRAR, ISSO VAI APARECER:
     print("ERRO CRÍTICO CAPTURADO: $error");
-
-    // Tenta desenhar uma tela de erro de emergência
     runApp(MaterialApp(
       home: Scaffold(
         backgroundColor: Colors.red.shade900,
@@ -31,11 +24,9 @@ void main() {
           child: Padding(
             padding: const EdgeInsets.all(20.0),
             child: SingleChildScrollView(
-              child: Text(
-                "FALHA NO APP:\n$error\n\n$stackTrace",
-                style:
-                    const TextStyle(color: Colors.white, fontFamily: 'Courier'),
-              ),
+              child: Text("FALHA NO APP:\n$error\n\n$stackTrace",
+                  style: const TextStyle(
+                      color: Colors.white, fontFamily: 'Courier')),
             ),
           ),
         ),
@@ -43,11 +34,9 @@ void main() {
     ));
   });
 }
-// --- FIM
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
-
   @override
   State<MapScreen> createState() => _MapScreenState();
 }
@@ -55,6 +44,12 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   final Completer<GoogleMapController> _controller = Completer();
   final TextEditingController _searchController = TextEditingController();
+
+  // --- VARIÁVEIS PARA COMPARAÇÃO (NOVA ABA) ---
+  final TextEditingController _endereco1Controller = TextEditingController();
+  final TextEditingController _endereco2Controller = TextEditingController();
+  Map<String, dynamic>? _resultadoComparacao;
+  bool _comparando = false;
 
   // --- CONFIGURAÇÕES ---
   final String googleApiKey = "AIzaSyDszIW2iBdyxbIo_NavRtpReKn8Lkrcbr8";
@@ -67,7 +62,8 @@ class _MapScreenState extends State<MapScreen> {
 
   double raioBusca = 300.0;
   String filtroAno = "2025";
-  int menuIndex = 0; // 0: Celular, 1: Veiculo, 2: Acidente, 3: Criminal
+  int menuIndex =
+      0; // 0: Celular, 1: Veiculo, 2: Acidente, 3: Criminal, 4: Comparar
 
   Map<String, int> estatisticasMarcas = {};
   bool carregando = false;
@@ -76,46 +72,49 @@ class _MapScreenState extends State<MapScreen> {
     if (menuIndex == 0) return "celular";
     if (menuIndex == 1) return "veiculo";
     if (menuIndex == 2) return "acidente";
-    return "criminal"; // Nova aba
+    return "criminal";
   }
 
-  // Laranja Neon (Padrão visual)
   Color get themeColor => Colors.orangeAccent;
 
   Widget _bloqueioMapa({required Widget child}) {
-    return PointerInterceptor(
-      child: child,
-    );
+    return PointerInterceptor(child: child);
   }
 
-  // --- BUSCA ENDEREÇO ---
+  // --- FUNÇÕES DE BUSCA MAPA ---
   Future<void> _buscarPorTexto(String endereco) async {
     if (endereco.isEmpty) return;
     setState(() => carregando = true);
     FocusScope.of(context).unfocus();
 
+    // Reutilizando a função robusta de geocoding
+    LatLng? destino = await _getLatLon(endereco);
+
+    if (destino != null) {
+      final GoogleMapController controller = await _controller.future;
+      controller.animateCamera(CameraUpdate.newLatLngZoom(destino, 16));
+      buscarCrimes(destino);
+    } else {
+      _snack("Endereço não encontrado.");
+    }
+    setState(() => carregando = false);
+  }
+
+  // Função Genérica para Geocodificar (Usada na busca e na comparação)
+  Future<LatLng?> _getLatLon(String endereco) async {
     final url = Uri.parse(
         "https://maps.googleapis.com/maps/api/geocode/json?address=$endereco&components=country:BR|administrative_area:SP&key=$googleApiKey");
-
     try {
       final response = await http.get(url);
       final data = json.decode(response.body);
-
       if (data['status'] == 'OK') {
-        final location = data['results'][0]['geometry']['location'];
-        final destino = LatLng(location['lat'], location['lng']);
-
-        final GoogleMapController controller = await _controller.future;
-        controller.animateCamera(CameraUpdate.newLatLngZoom(destino, 16));
-        buscarCrimes(destino);
-      } else {
-        _snack("Erro Google: ${data['status']} - Verifique a API Key.");
+        final loc = data['results'][0]['geometry']['location'];
+        return LatLng(loc['lat'], loc['lng']);
       }
     } catch (e) {
-      _snack("Erro na busca: $e");
-    } finally {
-      setState(() => carregando = false);
+      print("Erro Geocoding: $e");
     }
+    return null;
   }
 
   void _atualizarCirculo() {
@@ -134,22 +133,18 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
-  // --- GERADOR DE ICONES ---
   Future<BitmapDescriptor> _criarIconeCustomizado(
       String texto, Color cor) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
     final Paint paint = Paint()..color = cor.withOpacity(1.0);
     final int size = 30;
-
     canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, paint);
-
     Paint borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
     canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, borderPaint);
-
     if (int.tryParse(texto) != null && int.parse(texto) > 1) {
       TextPainter painter = TextPainter(textDirection: TextDirection.ltr);
       painter.text = TextSpan(
@@ -160,28 +155,22 @@ class _MapScreenState extends State<MapScreen> {
       painter.paint(canvas,
           Offset((size - painter.width) / 2, (size - painter.height) / 2));
     }
-
     final ui.Image img =
         await pictureRecorder.endRecording().toImage(size, size);
     final ByteData? data = await img.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.fromBytes(data!.buffer.asUint8List());
   }
 
-  // --- BUSCA DADOS ---
   Future<void> buscarCrimes(LatLng pos) async {
     setState(() {
       pontoSelecionado = pos;
       carregando = true;
       _atualizarCirculo();
     });
-
     try {
       final String linkReq =
           '$baseUrl/crimes?lat=${pos.latitude}&lon=${pos.longitude}&raio=${raioBusca.toInt()}&filtro=$filtroAno&tipo_crime=$tipoCrimeParam';
-      print("🔍 DEBUG LINK: $linkReq");
-
       final response = await http.get(Uri.parse(linkReq));
-
       if (response.statusCode != 200) {
         _snack("Erro Servidor (${response.statusCode})");
         setState(() => carregando = false);
@@ -190,10 +179,8 @@ class _MapScreenState extends State<MapScreen> {
 
       final Map<String, dynamic> responseData = json.decode(response.body);
       final List<dynamic> crimes = responseData['data'] ?? [];
-
-      if (crimes.isEmpty) {
+      if (crimes.isEmpty)
         _snack("Zero registros de '$tipoCrimeParam' para '$filtroAno' aqui.");
-      }
 
       Map<String, int> counts = {};
       Map<String, int> clusterCount = {};
@@ -204,7 +191,6 @@ class _MapScreenState extends State<MapScreen> {
         int qtd = c['quantidade'] ?? 1;
         clusterCount[latLonKey] = (clusterCount[latLonKey] ?? 0) + qtd;
         clusterData[latLonKey] = c;
-
         String tipo = (c['tipo'] ?? 'N/I').toString().toUpperCase();
         counts[tipo] = (counts[tipo] ?? 0) + 1;
       }
@@ -215,25 +201,19 @@ class _MapScreenState extends State<MapScreen> {
         int totalCluster = clusterCount[key]!;
         double l = double.parse(dados['lat'].toString());
         double ln = double.parse(dados['lon'].toString());
-
         Color corMarker = themeColor;
         if (menuIndex == 2) {
           String sev = dados['severidade'] ?? 'LEVE';
           if (sev == 'FATAL') corMarker = Colors.red[900]!;
         }
-        // Poderia customizar a cor para 'criminal' (índice 3) aqui se quisesse
-
         BitmapDescriptor icon =
             await _criarIconeCustomizado("$totalCluster", corMarker);
-
         newMarkers.add(Marker(
-          markerId: MarkerId(key),
-          position: LatLng(l, ln),
-          icon: icon,
-          onTap: () => buscarDetalhesPonto(LatLng(l, ln)),
-        ));
+            markerId: MarkerId(key),
+            position: LatLng(l, ln),
+            icon: icon,
+            onTap: () => buscarDetalhesPonto(LatLng(l, ln))));
       }
-
       setState(() {
         _markers = newMarkers;
         estatisticasMarcas = counts;
@@ -249,7 +229,6 @@ class _MapScreenState extends State<MapScreen> {
     setState(() => carregando = true);
     final url = Uri.parse(
         '$baseUrl/detalhes?lat=${pos.latitude}&lon=${pos.longitude}&filtro=$filtroAno&tipo_crime=$tipoCrimeParam');
-
     try {
       final response = await http.get(url);
       if (response.statusCode == 200) {
@@ -266,7 +245,6 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  // --- GAVETA ---
   void _exibirGavetaDetalhes(List<dynamic> lista) {
     showModalBottomSheet(
       context: context,
@@ -304,7 +282,6 @@ class _MapScreenState extends State<MapScreen> {
                     final c = lista[i];
                     bool isAcidente = menuIndex == 2;
                     bool isCriminal = menuIndex == 3;
-
                     return Card(
                       color: Colors.white.withOpacity(0.1),
                       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -327,26 +304,25 @@ class _MapScreenState extends State<MapScreen> {
                                 children: [
                                   if (isAcidente) ...[
                                     Wrap(
-                                      spacing: 15,
-                                      runSpacing: 10,
-                                      alignment: WrapAlignment.center,
-                                      children: [
-                                        _iconStat(Icons.directions_car,
-                                            c['autos'], "Carros"),
-                                        _iconStat(Icons.two_wheeler, c['motos'],
-                                            "Motos"),
-                                        _iconStat(Icons.directions_walk,
-                                            c['pedestres'], "Pedestres"),
-                                        _iconStat(Icons.pedal_bike, c['bikes'],
-                                            "Bikes"),
-                                        _iconStat(Icons.directions_bus,
-                                            c['onibus'], "Ônibus"),
-                                        _iconStat(Icons.local_shipping,
-                                            c['caminhoes'], "Caminhões"),
-                                        _iconStat(Icons.help_outline,
-                                            c['outros'], "Outros"),
-                                      ],
-                                    ),
+                                        spacing: 15,
+                                        runSpacing: 10,
+                                        alignment: WrapAlignment.center,
+                                        children: [
+                                          _iconStat(Icons.directions_car,
+                                              c['autos'], "Carros"),
+                                          _iconStat(Icons.two_wheeler,
+                                              c['motos'], "Motos"),
+                                          _iconStat(Icons.directions_walk,
+                                              c['pedestres'], "Pedestres"),
+                                          _iconStat(Icons.pedal_bike,
+                                              c['bikes'], "Bikes"),
+                                          _iconStat(Icons.directions_bus,
+                                              c['onibus'], "Ônibus"),
+                                          _iconStat(Icons.local_shipping,
+                                              c['caminhoes'], "Caminhões"),
+                                          _iconStat(Icons.help_outline,
+                                              c['outros'], "Outros"),
+                                        ]),
                                     const SizedBox(height: 15),
                                     if (c['lista_veiculos'] != null &&
                                         (c['lista_veiculos'] as List)
@@ -379,18 +355,14 @@ class _MapScreenState extends State<MapScreen> {
                                         color: Colors.white24, height: 20),
                                     _itemInfo("Local:", c['local_texto']),
                                   ] else ...[
-                                    // Lógica para Celular, Veículo e Criminal
                                     if (isCriminal)
-                                      _itemInfo("Natureza:",
-                                          c['marca']) // 'marca' aqui contém 'natureza_apurada'
+                                      _itemInfo("Natureza:", c['marca'])
                                     else
                                       _itemInfo("Marca:", c['marca']),
-
                                     if (menuIndex == 1) ...[
                                       _itemInfo("Placa:", c['placa']),
                                       _itemInfo("Cor:", c['cor']),
                                     ],
-
                                     _itemInfo("Endereço:", c['local_texto']),
                                   ]
                                 ]),
@@ -417,7 +389,7 @@ class _MapScreenState extends State<MapScreen> {
           borderRadius: BorderRadius.circular(5),
           border: Border(left: BorderSide(color: themeColor, width: 2))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text("${v['modelo'] ?? 'Modelo N/I'} (${v['ano_fab'] ?? '-'})",
+        Text("${v['modelo'] ?? 'N/I'} (${v['ano_fab'] ?? '-'})",
             style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
@@ -446,10 +418,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Widget _iconStat(IconData icon, dynamic count, String label) {
-    int val = 0;
-    if (count is int)
-      val = count;
-    else if (count is double) val = count.toInt();
+    int val = count is int ? count : (count is double ? count.toInt() : 0);
     return Column(children: [
       Icon(icon, color: Colors.white, size: 20),
       Text(val.toString(),
@@ -489,6 +458,167 @@ class _MapScreenState extends State<MapScreen> {
   void _snack(String t) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(t), backgroundColor: Colors.red));
 
+  // --- NOVA FUNCIONALIDADE: EXECUTA COMPARAÇÃO ---
+  Future<void> _executarComparacao() async {
+    if (_endereco1Controller.text.isEmpty ||
+        _endereco2Controller.text.isEmpty) {
+      _snack("Preencha os dois locais!");
+      return;
+    }
+    setState(() => _comparando = true);
+    FocusScope.of(context).unfocus();
+
+    try {
+      LatLng? p1 = await _getLatLon(_endereco1Controller.text);
+      if (p1 == null)
+        throw "Local A não encontrado (Tente ser mais específico, ex: Rua Augusta, SP).";
+      LatLng? p2 = await _getLatLon(_endereco2Controller.text);
+      if (p2 == null) throw "Local B não encontrado.";
+
+      final url = Uri.parse(
+          '$baseUrl/comparar?lat1=${p1.latitude}&lon1=${p1.longitude}&lat2=${p2.latitude}&lon2=${p2.longitude}&filtro=$filtroAno');
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        setState(() => _resultadoComparacao = json.decode(response.body));
+      } else {
+        throw "Erro na API: ${response.statusCode}";
+      }
+    } catch (e) {
+      _snack("Erro: $e");
+    } finally {
+      setState(() => _comparando = false);
+    }
+  }
+
+  // --- UI DA TELA DE COMPARAÇÃO ---
+  Widget _buildTelaComparacao() {
+    return Container(
+      color: Colors.black,
+      padding: const EdgeInsets.all(20),
+      child: Column(children: [
+        const SizedBox(height: 40),
+        Text("DUELO DE LOCAIS",
+            style: TextStyle(
+                color: themeColor,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.5)),
+        const Text("Compare a segurança de dois endereços (Raio 500m)",
+            style: TextStyle(color: Colors.white54, fontSize: 12)),
+        const SizedBox(height: 20),
+        _inputLocal(_endereco1Controller, "Local A (Ex: Av Paulista, 1000)"),
+        const SizedBox(height: 10),
+        _inputLocal(_endereco2Controller, "Local B (Ex: Rua Augusta, 500)"),
+        const SizedBox(height: 20),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.analytics, color: Colors.black),
+          label: const Text("COMPARAR",
+              style:
+                  TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          style: ElevatedButton.styleFrom(
+              backgroundColor: themeColor,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 50, vertical: 15)),
+          onPressed: _executarComparacao,
+        ),
+        const SizedBox(height: 20),
+        if (_comparando)
+          const CircularProgressIndicator()
+        else if (_resultadoComparacao != null)
+          _buildTabelaResultados(),
+      ]),
+    );
+  }
+
+  Widget _inputLocal(TextEditingController ctrl, String hint) {
+    return TextField(
+      controller: ctrl,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: hint,
+        labelStyle: const TextStyle(color: Colors.white54),
+        filled: true,
+        fillColor: Colors.grey[900],
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: themeColor)),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Colors.white24)),
+      ),
+    );
+  }
+
+  Widget _buildTabelaResultados() {
+    var r = _resultadoComparacao!;
+    var a = r['local_a'];
+    var b = r['local_b'];
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+            color: Colors.grey[900],
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: Colors.white10)),
+        child: Column(children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            const Text("CRIMES (500m)",
+                style: TextStyle(color: Colors.white54, fontSize: 10)),
+            Text("LOCAL A",
+                style:
+                    TextStyle(color: themeColor, fontWeight: FontWeight.bold)),
+            Text("LOCAL B",
+                style: TextStyle(
+                    color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
+          ]),
+          const Divider(color: Colors.white24),
+          _linhaComp("Roubos Celular", a['celular'], b['celular']),
+          _linhaComp("Roubos Veículo", a['veiculo'], b['veiculo']),
+          _linhaComp("Ocorrências Policiais", a['criminal'], b['criminal']),
+          _linhaComp("Acidentes", a['acidente'], b['acidente']),
+          const Divider(color: Colors.white24),
+          _linhaComp("TOTAL", r['total_a'], r['total_b'], destaque: true),
+        ]),
+      ),
+    );
+  }
+
+  Widget _linhaComp(String label, int v1, int v2, {bool destaque = false}) {
+    Color corV1 = Colors.white;
+    Color corV2 = Colors.white;
+    if (v1 < v2) {
+      corV1 = Colors.greenAccent;
+      corV2 = Colors.redAccent;
+    } else if (v2 < v1) {
+      corV1 = Colors.redAccent;
+      corV2 = Colors.greenAccent;
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Expanded(
+            child: Text(label,
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight:
+                        destaque ? FontWeight.bold : FontWeight.normal))),
+        Text("$v1",
+            style: TextStyle(
+                color: destaque ? corV1 : Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold)),
+        const SizedBox(width: 40),
+        Text("$v2",
+            style: TextStyle(
+                color: destaque ? corV2 : Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold)),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -503,7 +633,8 @@ class _MapScreenState extends State<MapScreen> {
           setState(() {
             menuIndex = i;
             _markers = {};
-            if (pontoSelecionado != null) buscarCrimes(pontoSelecionado!);
+            if (pontoSelecionado != null && i != 4)
+              buscarCrimes(pontoSelecionado!);
           });
         },
         items: const [
@@ -514,174 +645,175 @@ class _MapScreenState extends State<MapScreen> {
           BottomNavigationBarItem(
               icon: Icon(Icons.warning_amber), label: "Acidentes"),
           BottomNavigationBarItem(
-              icon: Icon(Icons.local_police), label: "Polícia"), // Novo Item
+              icon: Icon(Icons.local_police), label: "Polícia"),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.compare_arrows), label: "Comparar"), // NOVO
         ],
       ),
-      body: Stack(children: [
-        GoogleMap(
-          mapType: MapType.normal,
-          initialCameraPosition: const CameraPosition(
-              target: LatLng(-23.5505, -46.6333), zoom: 14.4746),
-          onMapCreated: (c) {
-            _controller.complete(c);
-          },
-          markers: _markers,
-          circles: _circles,
-          myLocationEnabled: true,
-          myLocationButtonEnabled: false,
-          zoomControlsEnabled: false,
-          onTap: buscarCrimes,
-        ),
-
-        // --- 1. BUSCA (BLINDADA) ---
-        Positioned(
-            top: 50,
-            left: 15,
-            right: 15,
-            child: _bloqueioMapa(
-                child: Container(
-              decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.85),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: themeColor.withOpacity(0.5))),
-              child: TextField(
-                  controller: _searchController,
-                  onSubmitted: _buscarPorTexto,
-                  textInputAction: TextInputAction.search,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                      hintText: "Digite endereço ou CEP...",
-                      hintStyle:
-                          const TextStyle(color: Colors.white38, fontSize: 13),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                          vertical: 15, horizontal: 20),
-                      suffixIcon: IconButton(
-                          icon: Icon(Icons.search, color: themeColor),
-                          onPressed: () =>
-                              _buscarPorTexto(_searchController.text)))),
-            ))),
-
-        // --- 2. SLIDER E FILTROS (BLINDADOS) ---
-        Positioned(
-            top: 120,
-            left: 15,
-            right: 15,
-            child: _bloqueioMapa(
-              child: Column(children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.85),
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: themeColor.withOpacity(0.5))),
-                  child: Column(children: [
-                    Text("RAIO: ${raioBusca.toInt()} METROS",
-                        style: TextStyle(
-                            color: themeColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11)),
-                    Slider(
-                        value: raioBusca,
-                        min: 10,
-                        max: 1000,
-                        divisions: 99,
-                        activeColor: themeColor,
-                        inactiveColor: Colors.grey[800],
-                        onChanged: (v) => setState(() {
-                              raioBusca = v;
-                              _atualizarCirculo();
-                            }),
-                        onChangeEnd: (v) {
-                          if (pontoSelecionado != null)
-                            buscarCrimes(pontoSelecionado!);
-                        })
-                  ]),
-                ),
-                const SizedBox(height: 10),
-                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  _btn("2025", "2025"),
-                  _btn("3 ANOS", "3_anos"),
-                  _btn("5 ANOS", "5_anos")
-                ]),
-              ]),
-            )),
-
-        Positioned(
-            bottom: 20,
-            left: 15,
-            child: _bloqueioMapa(
-              child: FloatingActionButton(
-                  backgroundColor: themeColor,
-                  onPressed: _gps,
-                  child: const Icon(Icons.my_location, color: Colors.black)),
-            )),
-
-        // --- 3. ESTATÍSTICAS (BLINDADAS) ---
-        if (estatisticasMarcas.isNotEmpty)
-          Positioned(
-              bottom: 20,
-              right: 15,
-              child: _bloqueioMapa(
-                  child: Container(
-                      width: 200,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.9),
-                          borderRadius: BorderRadius.circular(15),
-                          border:
-                              Border.all(color: themeColor.withOpacity(0.5))),
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text(
-                            menuIndex == 2
-                                ? "TOP OCORRÊNCIAS"
-                                : menuIndex == 3
-                                    ? "TOP NATUREZAS"
-                                    : "TOP MARCAS",
-                            style: TextStyle(
-                                color: themeColor,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold)),
-                        Divider(color: themeColor, height: 15),
-                        ...(estatisticasMarcas.entries.toList()
-                              ..sort((a, b) => b.value.compareTo(a.value)))
-                            .take(5)
-                            .map((e) => Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 3),
-                                child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Flexible(
-                                          child: Text(e.key,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 10))),
-                                      Text("${e.value}",
-                                          style: TextStyle(
-                                              color: themeColor,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 10))
-                                    ])))
-                            .toList(),
-                        const Divider(color: Colors.white24, height: 15),
-                        const Text(
-                          "Toque nos ícones para detalhes",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 9,
-                              fontStyle: FontStyle.italic),
-                        )
-                      ])))),
-
-        if (carregando)
-          Center(
-              child:
-                  CircularProgressIndicator(color: themeColor, strokeWidth: 8)),
-      ]),
+      body: menuIndex == 4
+          ? _buildTelaComparacao()
+          : Stack(children: [
+              GoogleMap(
+                mapType: MapType.normal,
+                initialCameraPosition: const CameraPosition(
+                    target: LatLng(-23.5505, -46.6333), zoom: 14.4746),
+                onMapCreated: (c) {
+                  _controller.complete(c);
+                },
+                markers: _markers,
+                circles: _circles,
+                myLocationEnabled: true,
+                myLocationButtonEnabled: false,
+                zoomControlsEnabled: false,
+                onTap: buscarCrimes,
+              ),
+              Positioned(
+                  top: 50,
+                  left: 15,
+                  right: 15,
+                  child: _bloqueioMapa(
+                      child: Container(
+                          decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.85),
+                              borderRadius: BorderRadius.circular(30),
+                              border: Border.all(
+                                  color: themeColor.withOpacity(0.5))),
+                          child: TextField(
+                              controller: _searchController,
+                              onSubmitted: _buscarPorTexto,
+                              textInputAction: TextInputAction.search,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                  hintText: "Digite endereço ou CEP...",
+                                  hintStyle: const TextStyle(
+                                      color: Colors.white38, fontSize: 13),
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 15, horizontal: 20),
+                                  suffixIcon: IconButton(
+                                      icon:
+                                          Icon(Icons.search, color: themeColor),
+                                      onPressed: () => _buscarPorTexto(
+                                          _searchController.text))))))),
+              Positioned(
+                  top: 120,
+                  left: 15,
+                  right: 15,
+                  child: _bloqueioMapa(
+                      child: Column(children: [
+                    Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.85),
+                            borderRadius: BorderRadius.circular(15),
+                            border:
+                                Border.all(color: themeColor.withOpacity(0.5))),
+                        child: Column(children: [
+                          Text("RAIO: ${raioBusca.toInt()} METROS",
+                              style: TextStyle(
+                                  color: themeColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11)),
+                          Slider(
+                              value: raioBusca,
+                              min: 10,
+                              max: 1000,
+                              divisions: 99,
+                              activeColor: themeColor,
+                              inactiveColor: Colors.grey[800],
+                              onChanged: (v) => setState(() {
+                                    raioBusca = v;
+                                    _atualizarCirculo();
+                                  }),
+                              onChangeEnd: (v) {
+                                if (pontoSelecionado != null)
+                                  buscarCrimes(pontoSelecionado!);
+                              })
+                        ])),
+                    const SizedBox(height: 10),
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      _btn("2025", "2025"),
+                      _btn("3 ANOS", "3_anos"),
+                      _btn("5 ANOS", "5_anos")
+                    ]),
+                  ]))),
+              Positioned(
+                  bottom: 20,
+                  left: 15,
+                  child: _bloqueioMapa(
+                      child: FloatingActionButton(
+                          backgroundColor: themeColor,
+                          onPressed: _gps,
+                          child: const Icon(Icons.my_location,
+                              color: Colors.black)))),
+              if (estatisticasMarcas.isNotEmpty)
+                Positioned(
+                    bottom: 20,
+                    right: 15,
+                    child: _bloqueioMapa(
+                        child: Container(
+                            width: 200,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.9),
+                                borderRadius: BorderRadius.circular(15),
+                                border: Border.all(
+                                    color: themeColor.withOpacity(0.5))),
+                            child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                      menuIndex == 2
+                                          ? "TOP OCORRÊNCIAS"
+                                          : menuIndex == 3
+                                              ? "TOP NATUREZAS"
+                                              : "TOP MARCAS",
+                                      style: TextStyle(
+                                          color: themeColor,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold)),
+                                  Divider(color: themeColor, height: 15),
+                                  ...(estatisticasMarcas.entries.toList()
+                                        ..sort((a, b) =>
+                                            b.value.compareTo(a.value)))
+                                      .take(5)
+                                      .map((e) => Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 3),
+                                          child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Flexible(
+                                                    child: Text(e.key,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: const TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 10))),
+                                                Text("${e.value}",
+                                                    style: TextStyle(
+                                                        color: themeColor,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 10))
+                                              ])))
+                                      .toList(),
+                                  const Divider(
+                                      color: Colors.white24, height: 15),
+                                  const Text("Toque nos ícones para detalhes",
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 9,
+                                          fontStyle: FontStyle.italic))
+                                ])))),
+              if (carregando)
+                Center(
+                    child: CircularProgressIndicator(
+                        color: themeColor, strokeWidth: 8)),
+            ]),
     );
   }
 
