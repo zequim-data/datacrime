@@ -185,6 +185,7 @@ def comparar_locais(lat1: float, lon1: float, lat2: float, lon2: float, filtro: 
         "total_b": total_b,
         "raio": raio_comparacao
     }
-
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    import os
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)

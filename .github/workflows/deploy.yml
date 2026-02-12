@@ -36,7 +36,7 @@ jobs:
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_ZECCHIN_ANALYTICA }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_TOKEN}}'
           channelId: live
           projectId: zecchin-analytica
 
@@ -66,7 +66,7 @@ jobs:
       - name: Deploy API (Cloud Run)
         run: |
           gcloud run deploy zecchin-api \
-            --source . \
+            --source backend \
             --region southamerica-east1 \
             --allow-unauthenticated \
             --quiet
