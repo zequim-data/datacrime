@@ -1,4 +1,4 @@
-name: Deploy Total (App + API)
+name: Deploy Zecchin Analytica (Tank Mode)
 
 on:
   push:
@@ -6,53 +6,67 @@ on:
       - main
 
 jobs:
-  # --- TRILHA 1: FRONTEND (Mantém igual) ---
+  # --- TRILHA 1: FRONTEND (O Tanque de Guerra) ---
   deploy_frontend:
     runs-on: ubuntu-latest
     steps:
       - name: Baixar Código
         uses: actions/checkout@v4
 
-      - name: Configurar Flutter
+      # 1. Garante a versão que funciona (3.24.3)
+      - name: Configurar Flutter 3.24.3
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.24.3'
           channel: 'stable'
+          cache: true
 
-      - name: Instalar Dependências Flutter
-        run: flutter pub get
-
-      - name: Build Web (Release)
-        run: flutter build web --release
-
-      - name: Deploy para o Firebase
+      - name: Instalar Dependências
         run: |
-          sudo npm install -g firebase-tools
-          firebase deploy --only hosting --project zecchin-analytica --token ${{ secrets.FIREBASE_TOKEN }}
+          flutter clean
+          flutter pub get
 
-  # --- TRILHA 2: BACKEND (O Pulo do Gato) ---
+      # 2. O COMANDO MÁGICO (HTML Renderer + No Tree Shake)
+      # Isso garante que não dê Tela Branca no Firebase
+      - name: Build Web (Release Blindado)
+        run: flutter build web --release --web-renderer html --no-tree-shake-icons
+
+      # 3. Deploy Moderno (Usa a Service Account gerada pelo 'firebase init')
+      - name: Deploy para o Firebase
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_ZECCHIN_ANALYTICA }}'
+          channelId: live
+          projectId: zecchin-analytica
+
+  # --- TRILHA 2: BACKEND (Python FastAPI) ---
   deploy_backend:
     runs-on: ubuntu-latest
-    needs: []
+    # needs: deploy_frontend  <-- Descomente se quiser esperar o front terminar antes
     steps:
       - name: Baixar Código
         uses: actions/checkout@v4
 
-      # 1. Autentica (Isso gera o arquivo de credenciais)
+      # 1. Autentica no GCP
       - name: Autenticar no Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      # 2. Configura o CLI do gcloud (Instala a ferramenta)
+      # 2. Configura CLI
       - name: Configurar Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          project_id: zecchin-analytica # Seu ID fixo ou use secrets.GCP_PROJECT_ID
 
-      # 3. COMANDO MANUAL (Aqui a gente manda na pasta!)
-      - name: Deploy Manual (Forçando pasta backend)
+      # 3. Deploy do Python
+      # ATENÇÃO: Mudei '--source backend' para '--source .' (raiz)
+      # O Cloud Run vai procurar o 'Dockerfile' ou 'Procfile' ou 'requirements.txt' aqui.
+      - name: Deploy API (Cloud Run)
         run: |
           gcloud run deploy zecchin-api \
-            --source backend \
+            --source . \
             --region southamerica-east1 \
+            --allow-unauthenticated \
             --quiet

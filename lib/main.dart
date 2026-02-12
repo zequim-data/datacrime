@@ -554,39 +554,50 @@ class _MapScreenState extends State<MapScreen> {
     var r = _resultadoComparacao!;
     var a = r['local_a'];
     var b = r['local_b'];
+
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-            color: Colors.grey[900],
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: Colors.white10)),
-        child: Column(children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            const Text("CRIMES (500m)",
-                style: TextStyle(color: Colors.white54, fontSize: 10)),
-            Text("LOCAL A",
-                style:
-                    TextStyle(color: themeColor, fontWeight: FontWeight.bold)),
-            Text("LOCAL B",
-                style: TextStyle(
-                    color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
-          ]),
-          const Divider(color: Colors.white24),
-          _linhaComp("Roubos Celular", a['celular'], b['celular']),
-          _linhaComp("Roubos Veículo", a['veiculo'], b['veiculo']),
-          _linhaComp("Ocorrências Policiais", a['criminal'], b['criminal']),
-          _linhaComp("Acidentes", a['acidente'], b['acidente']),
-          const Divider(color: Colors.white24),
-          _linhaComp("TOTAL", r['total_a'], r['total_b'], destaque: true),
-        ]),
+      child: Center( // 1. Centraliza na tela
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 800), // 2. Trava a largura máxima (não estica)
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+              color: Colors.grey[900],
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.white10)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min, // Ajusta altura ao conteúdo
+            children: [
+              // CABEÇALHO ALINHADO
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(children: [
+                  Expanded(flex: 4, child: const Text("INDICADOR (Raio 500m)", style: TextStyle(color: Colors.white54, fontSize: 12))),
+                  Expanded(flex: 2, child: Center(child: Text("LOCAL A", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold)))),
+                  Expanded(flex: 2, child: Center(child: Text("LOCAL B", style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)))),
+                ]),
+              ),
+              const Divider(color: Colors.white24),
+
+              // LINHAS DE DADOS
+              _linhaComp("Roubos de Celular", a['celular'], b['celular']),
+              _linhaComp("Roubos de Veículo", a['veiculo'], b['veiculo']),
+              _linhaComp("Ocorrências Policiais", a['criminal'], b['criminal']),
+              _linhaComp("Acidentes de Trânsito", a['acidente'], b['acidente']), // Caso tenha adicionado acidentes
+
+              const Divider(color: Colors.white24),
+              _linhaComp("TOTAL GERAL", r['total_a'], r['total_b'], destaque: true),
+            ],
+          ),
+        ),
       ),
     );
   }
 
   Widget _linhaComp(String label, int v1, int v2, {bool destaque = false}) {
+    // Lógica de Cores (Quem tem menos crime ganha verde)
     Color corV1 = Colors.white;
     Color corV2 = Colors.white;
+
     if (v1 < v2) {
       corV1 = Colors.greenAccent;
       corV2 = Colors.redAccent;
@@ -594,27 +605,18 @@ class _MapScreenState extends State<MapScreen> {
       corV1 = Colors.redAccent;
       corV2 = Colors.greenAccent;
     }
+    
+    // Estilos de texto aumentados para melhor leitura
+    TextStyle styleLabel = TextStyle(color: Colors.white, fontSize: 14, fontWeight: destaque ? FontWeight.bold : FontWeight.normal);
+    TextStyle styleNum = TextStyle(fontSize: 18, fontWeight: FontWeight.bold);
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Expanded(
-            child: Text(label,
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight:
-                        destaque ? FontWeight.bold : FontWeight.normal))),
-        Text("$v1",
-            style: TextStyle(
-                color: destaque ? corV1 : Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold)),
-        const SizedBox(width: 40),
-        Text("$v2",
-            style: TextStyle(
-                color: destaque ? corV2 : Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold)),
+      padding: const EdgeInsets.symmetric(vertical: 12), // Mais respiro entre as linhas
+      child: Row(children: [
+        // 3. Colunas Proporcionais (Flex) para alinhar perfeito com o cabeçalho
+        Expanded(flex: 4, child: Text(label, style: styleLabel)),
+        Expanded(flex: 2, child: Center(child: Text("$v1", style: styleNum.copyWith(color: destaque ? corV1 : Colors.white)))),
+        Expanded(flex: 2, child: Center(child: Text("$v2", style: styleNum.copyWith(color: destaque ? corV2 : Colors.white)))),
       ]),
     );
   }
