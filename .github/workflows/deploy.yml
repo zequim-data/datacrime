@@ -43,7 +43,7 @@ jobs:
   # --- TRILHA 2: BACKEND (Python FastAPI) ---
   deploy_backend:
     runs-on: ubuntu-latest
-    ## needs: deploy_frontend  <-- Descomente se quiser esperar o front terminar antes
+    # needs: deploy_frontend  <-- Descomente se quiser esperar o front terminar antes
     steps:
       - name: Baixar Código
         uses: actions/checkout@v4
