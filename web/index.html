@@ -2,39 +2,91 @@
 <html>
 <head>
   <base href="$FLUTTER_BASE_HREF">
+
   <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Sistema de Inteligência Criminal Zecchin Analytica">
+
   <title>Zecchin Analytica</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Zecchin">
+
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDj2xClrlZVaLGs1H-m6XPNsLEhMbZ64Vw"></script>
+
   <style>
-    body { background-color: #000; }
-    .loading {
-      display: flex; justify-content: center; align-items: center;
-      height: 100vh; color: #00FFFF; font-family: sans-serif;
+    body { 
+      background-color: #000000; /* Fundo Preto */
+      margin: 0; 
+      padding: 0; 
+      overflow: hidden; /* Evita barras de rolagem durante o load */
+    }
+    
+    .loading-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+      background-color: #000;
+    }
+
+    .loading-text {
+      color: #00FFFF; /* Azul Neon / Ciano */
+      font-family: 'Courier New', Courier, monospace; /* Fonte estilo Hacker */
+      font-size: 18px;
+      font-weight: bold;
+      letter-spacing: 2px;
+      margin-top: 20px;
+      animation: blink 1.5s infinite;
+    }
+
+    /* Animação de piscar o texto */
+    @keyframes blink {
+      0% { opacity: 1; }
+      50% { opacity: 0.3; }
+      100% { opacity: 1; }
     }
   </style>
 </head>
 
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDj2xClrlZVaLGs1H-m6XPNsLEhMbZ64Vw"></script>
-
 <body>
-  <div id="loading-msg" class="loading">INICIALIZANDO SISTEMA...</div>
+  <div id="loading-msg" class="loading-container">
+    <div class="loading-text">INICIALIZANDO SISTEMA...</div>
+  </div>
 
   <script src="flutter_bootstrap.js" async></script>
   
   <script>
     window.addEventListener('load', function(ev) {
+      // Se o Flutter não carregou o script bootstrap, avisa no console
+      if (!window._flutter) {
+        console.warn('Flutter bootstrap not loaded.');
+        return;
+      }
+
+      // Inicia o Flutter
       _flutter.loader.load({
         onEntrypointLoaded: async function(engineInitializer) {
+          
+          // Inicializa a Engine
+          // renderer: "html" é CRÍTICO para evitar a tela branca em alguns PCs/Celulares
           const appRunner = await engineInitializer.initializeEngine({
-            // FORÇA O RENDERER HTML PARA MATAR OS ENVELOPINHOS
             renderer: "html",
           });
           
-          // Remove a mensagem de carregamento antes de dar o play
-          document.getElementById('loading-msg').remove();
+          // Remove a tela de carregamento "INICIALIZANDO..."
+          const loading = document.getElementById('loading-msg');
+          if (loading) {
+            loading.remove();
+          }
+          
+          // Roda o App
           await appRunner.runApp();
         }
       });
