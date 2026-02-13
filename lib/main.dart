@@ -42,7 +42,8 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  final Completer<GoogleMapController> _controller = Completer();
+  //final Completer<GoogleMapController> _controller = Completer();
+  GoogleMapController? _mapController;
   final TextEditingController _searchController = TextEditingController();
 
   // --- VARIÁVEIS PARA COMPARAÇÃO (NOVA ABA) ---
@@ -91,8 +92,9 @@ class _MapScreenState extends State<MapScreen> {
     LatLng? destino = await _getLatLon(endereco);
 
     if (destino != null) {
-      final GoogleMapController controller = await _controller.future;
-      controller.animateCamera(CameraUpdate.newLatLngZoom(destino, 16));
+      //final GoogleMapController controller = await _controller.future;
+      _mapController?.animateCamera(CameraUpdate.newLatLngZoom(destino, 16));
+      //controller.animateCamera(CameraUpdate.newLatLngZoom(destino, 16));
       buscarCrimes(destino);
     } else {
       _snack("Endereço não encontrado.");
@@ -448,9 +450,11 @@ class _MapScreenState extends State<MapScreen> {
     LocationPermission p = await Geolocator.requestPermission();
     if (p != LocationPermission.denied) {
       Position pos = await Geolocator.getCurrentPosition();
-      final GoogleMapController controller = await _controller.future;
-      controller.animateCamera(
-          CameraUpdate.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 15));
+      //final GoogleMapController controller = await _controller.future;
+      //controller.animateCamera(CameraUpdate.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 15));
+      _mapController?.animateCamera(
+              CameraUpdate.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 15)
+            );
       buscarCrimes(LatLng(pos.latitude, pos.longitude));
     }
   }
@@ -660,7 +664,8 @@ class _MapScreenState extends State<MapScreen> {
                 initialCameraPosition: const CameraPosition(
                     target: LatLng(-23.5505, -46.6333), zoom: 14.4746),
                 onMapCreated: (c) {
-                  _controller.complete(c);
+                  //_controller.complete(c);
+                  _mapController = c;
                 },
                 markers: _markers,
                 circles: _circles,
