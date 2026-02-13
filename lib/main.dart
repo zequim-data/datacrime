@@ -56,6 +56,8 @@ class _MapScreenState extends State<MapScreen> {
   LatLng? _posA;
   LatLng? _posB;
 
+  bool _precisaAjustarCamera = false; 
+
   // --- CONFIGURAÇÕES ---
   final String googleApiKey = "AIzaSyDszIW2iBdyxbIo_NavRtpReKn8Lkrcbr8";
   final String baseUrl =
@@ -134,17 +136,18 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
-Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
+  Future<BitmapDescriptor> _criarIconeCustomizado(
+      String texto, Color cor) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
 
     // TAMANHO FIXO SEGURO PARA WEB/MOBILE
     // 35 é um tamanho padrão excelente. Se quiser ainda menor, use 30.
-    const int size = 12; 
+    const int size = 12;
     const double radius = size / 2.0;
 
     final Paint paint = Paint()..color = cor.withOpacity(1.0);
-    
+
     // Desenha o círculo
     canvas.drawCircle(const Offset(radius, radius), radius, paint);
 
@@ -165,10 +168,12 @@ Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
               color: Colors.black,
               fontWeight: FontWeight.bold));
       painter.layout();
-      painter.paint(canvas, Offset((size - painter.width) / 2, (size - painter.height) / 2));
+      painter.paint(canvas,
+          Offset((size - painter.width) / 2, (size - painter.height) / 2));
     }
 
-    final ui.Image img = await pictureRecorder.endRecording().toImage(size, size);
+    final ui.Image img =
+        await pictureRecorder.endRecording().toImage(size, size);
     final ByteData? data = await img.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.fromBytes(data!.buffer.asUint8List());
   }
@@ -205,7 +210,7 @@ Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
         counts[tipo] = (counts[tipo] ?? 0) + 1;
       }
 
-     Set<Marker> newMarkers = {};
+      Set<Marker> newMarkers = {};
       for (var key in clusterCount.keys) {
         var dados = clusterData[key];
         int totalCluster = clusterCount[key]!;
@@ -217,9 +222,10 @@ Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
           if (sev == 'FATAL') corMarker = Colors.red[900]!;
         }
 
-        BitmapDescriptor icon = await _criarIconeCustomizado("$totalCluster", corMarker);
+        BitmapDescriptor icon =
+            await _criarIconeCustomizado("$totalCluster", corMarker);
 
-            newMarkers.add(Marker(
+        newMarkers.add(Marker(
             markerId: MarkerId(key),
             position: LatLng(l, ln),
             icon: icon,
@@ -485,11 +491,14 @@ Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
       setState(() {
         _posA = p1;
         _posB = p2;
+        _precisaAjustarCamera = true;
       });
 
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _ajustarCameraComparacao();
-      });
+      if (_compMapController != null) {
+          await Future.delayed(const Duration(milliseconds: 300));
+          _ajustarCameraComparacao();
+          _precisaAjustarCamera = false;
+        }
 
       final url = Uri.parse(
           '$baseUrl/comparar?lat1=${p1.latitude}&lon1=${p1.longitude}&lat2=${p2.latitude}&lon2=${p2.longitude}&filtro=$filtroAno');
@@ -507,81 +516,94 @@ Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
     }
   }
 
-Future<void> _ajustarCameraComparacao() async {
-  if (_compMapController == null || _posA == null || _posB == null) return;
+  Future<void> _ajustarCameraComparacao() async {
+    if (_compMapController == null || _posA == null || _posB == null) return;
 
-  final bounds = LatLngBounds(
-    southwest: LatLng(
-      _posA!.latitude < _posB!.latitude ? _posA!.latitude : _posB!.latitude,
-      _posA!.longitude < _posB!.longitude ? _posA!.longitude : _posB!.longitude,
-    ),
-    northeast: LatLng(
-      _posA!.latitude > _posB!.latitude ? _posA!.latitude : _posB!.latitude,
-      _posA!.longitude > _posB!.longitude ? _posA!.longitude : _posB!.longitude,
-    ),
-  );
-
-  try {
-    // Força um pequeno zoom antes (hack necessário no Web)
-    await _compMapController!.moveCamera(
-      CameraUpdate.newLatLng(_posA!),
+    final bounds = LatLngBounds(
+      southwest: LatLng(
+        _posA!.latitude < _posB!.latitude ? _posA!.latitude : _posB!.latitude,
+        _posA!.longitude < _posB!.longitude
+            ? _posA!.longitude
+            : _posB!.longitude,
+      ),
+      northeast: LatLng(
+        _posA!.latitude > _posB!.latitude ? _posA!.latitude : _posB!.latitude,
+        _posA!.longitude > _posB!.longitude
+            ? _posA!.longitude
+            : _posB!.longitude,
+      ),
     );
 
-    await Future.delayed(const Duration(milliseconds: 200));
+    try {
+      // Força um pequeno zoom antes (hack necessário no Web)
+      await _compMapController!.moveCamera(
+        CameraUpdate.newLatLng(_posA!),
+      );
 
-    await _compMapController!.animateCamera(
-      CameraUpdate.newLatLngBounds(bounds, 120),
-    );
-  } catch (e) {
-    print("Erro bounds web: $e");
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      await _compMapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 120),
+      );
+    } catch (e) {
+      print("Erro bounds web: $e");
+    }
   }
-}
 
   Widget _btnCompara(String label, String value) {
-      bool selected = filtroAno == value;
-      return Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2), // Espaço lateral
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              // Se selecionado = Cor Tema (Laranja), se não = Preto Transparente
-              backgroundColor: selected ? themeColor : Colors.black.withOpacity(0.6),
-              foregroundColor: selected ? Colors.black : Colors.white60,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(vertical: 12), // Altura do botão
-              side: BorderSide(color: selected ? themeColor : Colors.white24),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () {
-              setState(() {
-                filtroAno = value;
-              });
-              // Se já tiver feito uma busca, refaz automaticamente com o novo ano!
-              if (_posA != null && _posB != null) {
-                _executarComparacao();
-              }
-            },
-            child: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+    bool selected = filtroAno == value;
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2), // Espaço lateral
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            // Se selecionado = Cor Tema (Laranja), se não = Preto Transparente
+            backgroundColor:
+                selected ? themeColor : Colors.black.withOpacity(0.6),
+            foregroundColor: selected ? Colors.black : Colors.white60,
+            elevation: 0,
+            padding:
+                const EdgeInsets.symmetric(vertical: 12), // Altura do botão
+            side: BorderSide(color: selected ? themeColor : Colors.white24),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
+          onPressed: () {
+            setState(() {
+              filtroAno = value;
+            });
+            // Se já tiver feito uma busca, refaz automaticamente com o novo ano!
+            if (_posA != null && _posB != null) {
+              _executarComparacao();
+            }
+          },
+          child: Text(label,
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
         ),
-      );
-    }
+      ),
+    );
+  }
+
   // --- UI DA TELA DE COMPARAÇÃO (MAPA AO FUNDO) ---
   Widget _buildTelaComparacao() {
     return Stack(
       children: [
         // 1. Mapa de Fundo
         GoogleMap(
+          key: const ValueKey("comparacaoMap"),
           initialCameraPosition:
               const CameraPosition(target: LatLng(-23.55, -46.63), zoom: 11),
-          onMapCreated: (c) {
+          onMapCreated: (c) async {
             _compMapController = c;
+            print("MAPA CRIADO");
 
-            // Se já houver pontos definidos, ajusta
-            if (_posA != null && _posB != null) {
-              Future.delayed(const Duration(milliseconds: 300), () {
-                _ajustarCameraComparacao();
-              });
+            await Future.delayed(const Duration(milliseconds: 300));
+
+            if (_precisaAjustarCamera && _posA != null && _posB != null) {
+              print("AJUSTANDO CAMERA AGORA");
+              _ajustarCameraComparacao();
+              _precisaAjustarCamera = false;
             }
           },
           zoomControlsEnabled: false,
