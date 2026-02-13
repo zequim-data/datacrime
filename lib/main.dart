@@ -507,46 +507,56 @@ Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
   }
 
 Future<void> _ajustarCameraComparacao(LatLng p1, LatLng p2) async {
-    // Delay de segurança para teclado e renderização
+    // Delay para garantir que o teclado sumiu e a tela estabilizou
     await Future.delayed(const Duration(milliseconds: 800));
 
     if (_compMapController == null) return;
 
-    // 1. CENTRO DO MAPA
+    // 1. CÁLCULO DO CENTRO COM "OFFSET" (PULO DO GATO)
+    // Como a tabela de resultados tapa a parte de baixo da tela,
+    // nós calculamos o centro normal, mas subtraímos um pouco da latitude
+    // para "empurrar" a visão para baixo, fazendo os pontos subirem na tela.
     double latCentro = (p1.latitude + p2.latitude) / 2;
     double lonCentro = (p1.longitude + p2.longitude) / 2;
-    LatLng centro = LatLng(latCentro, lonCentro);
+    
+    // Pequeno ajuste para subir os pinos visualmente
+    // (Testado empiricamente para telas verticais)
+    double offsetVisual = 0.005; 
+    
+    LatLng centroAjustado = LatLng(latCentro - offsetVisual, lonCentro);
 
-    // 2. DISTÂNCIA EM METROS
+    // 2. DISTÂNCIA REAL
     double distancia = Geolocator.distanceBetween(
       p1.latitude, p1.longitude,
       p2.latitude, p2.longitude
     );
 
-    // 3. ZOOM CALIBRADO PARA CELULAR EM PÉ (PORTRAIT)
+    // 3. TABELA DE ZOOM "ULTRA CONSERVADORA"
+    // Reduzi todos os zooms em 1 ou 2 pontos para garantir que cabe.
     double zoomLevel;
-    if (distancia < 1000) {
-      zoomLevel = 16.0; // Vizinhos de rua (<1km)
-    } else if (distancia < 3000) {
-      zoomLevel = 15.0; // Mesmo Bairro (<3km)
-    } else if (distancia < 8000) {
-      zoomLevel = 13.5; // Zona Norte-Sul (<8km)
-    } else if (distancia < 15000) {
-      zoomLevel = 12.5; // Cruzando a cidade (<15km)
-    } else if (distancia < 35000) {
-      zoomLevel = 10.5; // Grande SP / Extremos (<35km)
-    } else if (distancia < 80000) {
-      zoomLevel = 9.0;  // Região Metropolitana (<80km)
-    } else if (distancia < 150000) {
-      zoomLevel = 8.0;  // Campinas <-> SP precisa ser zoom 8!
-    } else {
-      zoomLevel = 6.5;  // Interestadual
+    
+    if (distancia < 2000) {        // < 2km
+      zoomLevel = 13.5; 
+    } else if (distancia < 5000) { // < 5km
+      zoomLevel = 12.5;
+    } else if (distancia < 10000) { // < 10km
+      zoomLevel = 11.5;
+    } else if (distancia < 25000) { // < 25km (Cidade SP Norte-Sul)
+      zoomLevel = 10.0; 
+    } else if (distancia < 50000) { // < 50km (Grande SP)
+      zoomLevel = 9.0;
+    } else if (distancia < 100000) { // < 100km (Campinas-SP)
+      zoomLevel = 8.0; 
+    } else if (distancia < 200000) { // < 200km (Litoral/Interior)
+      zoomLevel = 7.0; 
+    } else {                         // Interestadual
+      zoomLevel = 5.5; 
     }
 
     try {
-      // 'moveCamera' é instantâneo e não falha se a tela estiver redimensionando
+      print("Distancia: $distancia m | Zoom aplicado: $zoomLevel"); // Para debug no console
       _compMapController!.moveCamera(
-        CameraUpdate.newLatLngZoom(centro, zoomLevel),
+        CameraUpdate.newLatLngZoom(centroAjustado, zoomLevel),
       );
     } catch (e) {
       print("Erro zoom: $e");
