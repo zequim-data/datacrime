@@ -134,30 +134,43 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
-  Future<BitmapDescriptor> _criarIconeCustomizado(
-      String texto, Color cor) async {
+  Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
+    
+    // 1. REDUZA O TAMANHO BASE (Sugestão: de 30 para 22 ou 24)
+    const int size = 22; 
+    const double radius = size / 2;
+
     final Paint paint = Paint()..color = cor.withOpacity(1.0);
-    final int size = 30;
-    canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, paint);
+    
+    // Desenha o círculo principal
+    canvas.drawCircle(const Offset(radius, radius), radius, paint);
+
+    // Borda branca mais fina para acompanhar o tamanho menor
     Paint borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-    canvas.drawCircle(Offset(size / 2, size / 2), size / 2.0, borderPaint);
+      ..strokeWidth = 1.5; 
+    canvas.drawCircle(const Offset(radius, radius), radius, borderPaint);
+
+    // 2. TEXTO PROPORCIONAL
+    // Se houver mais de 1 ocorrência no ponto, mostra o número
     if (int.tryParse(texto) != null && int.parse(texto) > 1) {
       TextPainter painter = TextPainter(textDirection: TextDirection.ltr);
       painter.text = TextSpan(
           text: texto,
-          style: const TextStyle(
-              fontSize: 11, color: Colors.black, fontWeight: FontWeight.bold));
+          style: TextStyle(
+              fontSize: size * 0.45, // Ajusta a fonte automaticamente (aprox. 10)
+              color: Colors.black, 
+              fontWeight: FontWeight.bold));
       painter.layout();
-      painter.paint(canvas,
-          Offset((size - painter.width) / 2, (size - painter.height) / 2));
+      
+      // Centralização perfeita do texto
+      painter.paint(canvas, Offset((size - painter.width) / 2, (size - painter.height) / 2));
     }
-    final ui.Image img =
-        await pictureRecorder.endRecording().toImage(size, size);
+    
+    final ui.Image img = await pictureRecorder.endRecording().toImage(size, size);
     final ByteData? data = await img.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.fromBytes(data!.buffer.asUint8List());
   }
@@ -494,25 +507,40 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  void _ajustarCameraComparacao(LatLng p1, LatLng p2) {
+void _ajustarCameraComparacao(LatLng p1, LatLng p2) async {
+    // 1. Aguarda um fôlego para o Flutter renderizar o widget do mapa
+    // Sem isso, o Google Maps não sabe o tamanho da área disponível para o zoom
+    await Future.delayed(const Duration(milliseconds: 500));
+
     if (_compMapController == null) return;
 
-    LatLngBounds bounds;
-    if (p1.latitude > p2.latitude && p1.longitude > p2.longitude) {
-      bounds = LatLngBounds(southwest: p2, northeast: p1);
-    } else if (p1.longitude > p2.longitude) {
-      bounds = LatLngBounds(
-          southwest: LatLng(p1.latitude, p2.longitude),
-          northeast: LatLng(p2.latitude, p1.longitude));
-    } else if (p1.latitude > p2.latitude) {
-      bounds = LatLngBounds(
-          southwest: LatLng(p2.latitude, p1.longitude),
-          northeast: LatLng(p1.latitude, p2.longitude));
-    } else {
-      bounds = LatLngBounds(southwest: p1, northeast: p2);
-    }
+    try {
+      // 2. Calcula os limites (SW e NE) de forma matemática pura
+      LatLngBounds bounds = LatLngBounds(
+        southwest: LatLng(
+          p1.latitude < p2.latitude ? p1.latitude : p2.latitude,
+          p1.longitude < p2.longitude ? p1.longitude : p2.longitude,
+        ),
+        northeast: LatLng(
+          p1.latitude > p2.latitude ? p1.latitude : p2.latitude,
+          p1.longitude > p2.longitude ? p1.longitude : p2.longitude,
+        ),
+      );
 
-    _compMapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
+      // 3. Executa o zoom automático com um padding menor (50px)
+      // No Web, paddings muito grandes em telas pequenas podem fazer o comando falhar
+      await _compMapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 50),
+      );
+    } catch (e) {
+      print("Erro ao ajustar câmera: $e");
+      // Plano B: Se o Bounds falhar, centraliza no meio do caminho com zoom fixo
+      double midLat = (p1.latitude + p2.latitude) / 2;
+      double midLon = (p1.longitude + p2.longitude) / 2;
+      _compMapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(LatLng(midLat, midLon), 12),
+      );
+    }
   }
 
   // --- UI DA TELA DE COMPARAÇÃO (MAPA AO FUNDO) ---
