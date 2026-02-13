@@ -21,28 +21,28 @@ CONFIG = {
     "celular": {
         "tabela": "zecchin-analytica.ssp_raw.raw_celulares_ssp",
         "col_marca": "marca_objeto",
-        "col_filtro_ano": "datahora_registro_bo",
+        "col_filtro_ano": "dt_particao",
         "col_exibicao_data": "datahora_registro_bo",
         "col_local": "logradouro"
     },
     "veiculo": {
         "tabela": "zecchin-analytica.ssp_raw.raw_veiculos_ssp",
         "col_marca": "descr_marca_veiculo",
-        "col_filtro_ano": "datahora_registro_bo",
+        "col_filtro_ano": "dt_particao",
         "col_exibicao_data": "datahora_registro_bo",
         "col_local": "logradouro"
     },
     "acidente": {
         "tabela": "zecchin-analytica.infosiga_raw.raw_sinistros",
         "col_marca": "tp_sinistro_primario",
-        "col_filtro_ano": "ano_sinistro", 
+        "col_filtro_ano": "dt_particao", 
         "col_exibicao_data": "data_sinistro",
         "col_local": "logradouro"
     },
     "criminal": {
         "tabela": "zecchin-analytica.ssp_raw.raw_dados_criminais_ssp",
         "col_marca": "natureza_apurada",
-        "col_filtro_ano": "data_ocorrencia_bo",
+        "col_filtro_ano": "dt_particao",
         "col_exibicao_data": "data_ocorrencia_bo",
         "col_local": "logradouro"
     }
@@ -61,18 +61,18 @@ def get_geo_sql(campo):
     return f"SAFE_CAST(REPLACE(CAST({campo} AS STRING), ',', '.') AS FLOAT64)"
 
 def get_condicao_ano(filtro, col_filtro):
-    if col_filtro == "ano_sinistro":
-        col_sql = f"CAST(SAFE_CAST({col_filtro} AS FLOAT64) AS INT64)"
-        if filtro == "2025": return f"{col_sql} = 2025"
-        if filtro == "3_anos": return f"{col_sql} >= 2023"
-        if filtro == "5_anos": return f"{col_sql} >= 2021"
-        return f"{col_sql} >= 2021"
-    else:
-        ano_sql = f"SUBSTR(CAST({col_filtro} AS STRING), 1, 4)"
-        if filtro == "2025": return f"{ano_sql} = '2025'"
-        if filtro == "3_anos": return f"{ano_sql} >= '2023'"
-        if filtro == "5_anos": return f"{ano_sql} >= '2021'"
-        return f"{ano_sql} >= '2021'"
+    # Agora que col_filtro é sempre 'dt_particao' (um DATE real)
+    # usamos EXTRACT para máxima performance no particionamento
+    sql_ano = f"EXTRACT(YEAR FROM {col_filtro})"
+    
+    if filtro == "2025":
+        return f"{sql_ano} = 2025"
+    if filtro == "3_anos":
+        return f"{sql_ano} >= 2023"
+    if filtro == "5_anos":
+        return f"{sql_ano} >= 2021"
+    
+    return f"{sql_ano} >= 2021"
 
 @app.get("/crimes")
 def get_crimes(lat: float, lon: float, raio: int, filtro: str, tipo_crime: str):
@@ -110,8 +110,8 @@ def get_detalhes(lat: float, lon: float, filtro: str, tipo_crime: str):
     raio_detalhe = 2 
 
     if tipo_crime == "acidente":
-        join_veiculos = "CAST(SAFE_CAST(v.id_sinistro AS FLOAT64) AS INT64) = CAST(SAFE_CAST(t.id_sinistro AS FLOAT64) AS INT64)"
-        join_pessoas = "CAST(SAFE_CAST(p.id_sinistro AS FLOAT64) AS INT64) = CAST(SAFE_CAST(t.id_sinistro AS FLOAT64) AS INT64)"
+        join_veiculos = f"v.dt_particao >= '2021-01-01' AND CAST(SAFE_CAST(v.id_sinistro AS FLOAT64) AS INT64) = CAST(SAFE_CAST(t.id_sinistro AS FLOAT64) AS INT64)"
+        join_pessoas = f"p.dt_particao >= '2021-01-01' AND CAST(SAFE_CAST(p.id_sinistro AS FLOAT64) AS INT64) = CAST(SAFE_CAST(t.id_sinistro AS FLOAT64) AS INT64)"
         query = f"""
             SELECT tp_sinistro_primario as rubrica, COALESCE({cfg['col_local']}, 'Local não informado') as local_texto, CAST({cfg['col_exibicao_data']} AS STRING) as data,
                    COALESCE(SAFE_CAST(qtd_automovel AS INT64), 0) as autos, COALESCE(SAFE_CAST(qtd_motocicleta AS INT64), 0) as motos,
