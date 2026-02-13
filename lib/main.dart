@@ -140,7 +140,7 @@ Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
 
     // TAMANHO FIXO SEGURO PARA WEB/MOBILE
     // 35 é um tamanho padrão excelente. Se quiser ainda menor, use 30.
-    const int size = 35; 
+    const int size = 12; 
     const double radius = size / 2.0;
 
     final Paint paint = Paint()..color = cor.withOpacity(1.0);
