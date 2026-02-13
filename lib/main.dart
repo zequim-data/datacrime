@@ -510,26 +510,31 @@ Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
 Future<void> _ajustarCameraComparacao() async {
   if (_compMapController == null || _posA == null || _posB == null) return;
 
-  final southWest = LatLng(
-    _posA!.latitude < _posB!.latitude ? _posA!.latitude : _posB!.latitude,
-    _posA!.longitude < _posB!.longitude ? _posA!.longitude : _posB!.longitude,
-  );
-
-  final northEast = LatLng(
-    _posA!.latitude > _posB!.latitude ? _posA!.latitude : _posB!.latitude,
-    _posA!.longitude > _posB!.longitude ? _posA!.longitude : _posB!.longitude,
-  );
-
   final bounds = LatLngBounds(
-    southwest: southWest,
-    northeast: northEast,
+    southwest: LatLng(
+      _posA!.latitude < _posB!.latitude ? _posA!.latitude : _posB!.latitude,
+      _posA!.longitude < _posB!.longitude ? _posA!.longitude : _posB!.longitude,
+    ),
+    northeast: LatLng(
+      _posA!.latitude > _posB!.latitude ? _posA!.latitude : _posB!.latitude,
+      _posA!.longitude > _posB!.longitude ? _posA!.longitude : _posB!.longitude,
+    ),
   );
 
-  await Future.delayed(const Duration(milliseconds: 300));
+  try {
+    // Força um pequeno zoom antes (hack necessário no Web)
+    await _compMapController!.moveCamera(
+      CameraUpdate.newLatLng(_posA!),
+    );
 
-  _compMapController!.animateCamera(
-    CameraUpdate.newLatLngBounds(bounds, 120),
-  );
+    await Future.delayed(const Duration(milliseconds: 200));
+
+    await _compMapController!.animateCamera(
+      CameraUpdate.newLatLngBounds(bounds, 120),
+    );
+  } catch (e) {
+    print("Erro bounds web: $e");
+  }
 }
 
   Widget _btnCompara(String label, String value) {
