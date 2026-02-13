@@ -161,7 +161,7 @@ Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
       painter.text = TextSpan(
           text: texto,
           style: const TextStyle(
-              fontSize: 14, // Fonte legível para o tamanho 35
+              fontSize: 7, // Fonte legível para o tamanho 35
               color: Colors.black,
               fontWeight: FontWeight.bold));
       painter.layout();
@@ -507,38 +507,44 @@ Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
   }
 
 void _ajustarCameraComparacao(LatLng p1, LatLng p2) async {
-    // 1. Aguarda um fôlego para o Flutter renderizar o widget do mapa
-    // Sem isso, o Google Maps não sabe o tamanho da área disponível para o zoom
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Aguarda o teclado fechar e a UI estabilizar (Segurança)
+    await Future.delayed(const Duration(milliseconds: 600));
 
     if (_compMapController == null) return;
 
-    try {
-      // 2. Calcula os limites (SW e NE) de forma matemática pura
-      LatLngBounds bounds = LatLngBounds(
-        southwest: LatLng(
-          p1.latitude < p2.latitude ? p1.latitude : p2.latitude,
-          p1.longitude < p2.longitude ? p1.longitude : p2.longitude,
-        ),
-        northeast: LatLng(
-          p1.latitude > p2.latitude ? p1.latitude : p2.latitude,
-          p1.longitude > p2.longitude ? p1.longitude : p2.longitude,
-        ),
-      );
+    // 1. CALCULAR O PONTO CENTRAL (MÉDIA GEOGRÁFICA)
+    // O mapa vai focar exatamente no meio do caminho entre A e B
+    double latCentro = (p1.latitude + p2.latitude) / 2;
+    double lonCentro = (p1.longitude + p2.longitude) / 2;
+    LatLng centro = LatLng(latCentro, lonCentro);
 
-      // 3. Executa o zoom automático com um padding menor (50px)
-      // No Web, paddings muito grandes em telas pequenas podem fazer o comando falhar
+    // 2. CALCULAR A DISTÂNCIA ENTRE OS PONTOS (EM METROS)
+    // Usamos a biblioteca Geolocator que você já tem importada
+    double distanciaEmMetros = Geolocator.distanceBetween(
+      p1.latitude, p1.longitude, 
+      p2.latitude, p2.longitude
+    );
+
+    // 3. DEFINIR O ZOOM BASEADO NA DISTÂNCIA (Regra de Três Logarítmica)
+    // Quanto maior a distância, menor o zoom.
+    double zoomLevel;
+    if (distanciaEmMetros < 1000) {
+      zoomLevel = 15.0; // Perto (1km)
+    } else if (distanciaEmMetros < 3000) {
+      zoomLevel = 14.0; // Médio (3km)
+    } else if (distanciaEmMetros < 10000) {
+      zoomLevel = 12.5; // Longe (10km)
+    } else {
+      zoomLevel = 10.0; // Muito longe (Cidade/Estado)
+    }
+
+    try {
+      // Usa newLatLngZoom que é 100% estável no Web
       await _compMapController!.animateCamera(
-        CameraUpdate.newLatLngBounds(bounds, 50),
+        CameraUpdate.newLatLngZoom(centro, zoomLevel),
       );
     } catch (e) {
-      print("Erro ao ajustar câmera: $e");
-      // Plano B: Se o Bounds falhar, centraliza no meio do caminho com zoom fixo
-      double midLat = (p1.latitude + p2.latitude) / 2;
-      double midLon = (p1.longitude + p2.longitude) / 2;
-      _compMapController!.animateCamera(
-        CameraUpdate.newLatLngZoom(LatLng(midLat, midLon), 12),
-      );
+      print("Erro ao mover câmera: $e");
     }
   }
 
