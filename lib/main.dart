@@ -506,45 +506,50 @@ Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
     }
   }
 
-void _ajustarCameraComparacao(LatLng p1, LatLng p2) async {
-    // Aguarda o teclado fechar e a UI estabilizar (Segurança)
-    await Future.delayed(const Duration(milliseconds: 600));
+Future<void> _ajustarCameraComparacao(LatLng p1, LatLng p2) async {
+    // Delay de segurança para teclado e renderização
+    await Future.delayed(const Duration(milliseconds: 800));
 
     if (_compMapController == null) return;
 
-    // 1. CALCULAR O PONTO CENTRAL (MÉDIA GEOGRÁFICA)
-    // O mapa vai focar exatamente no meio do caminho entre A e B
+    // 1. CENTRO DO MAPA
     double latCentro = (p1.latitude + p2.latitude) / 2;
     double lonCentro = (p1.longitude + p2.longitude) / 2;
     LatLng centro = LatLng(latCentro, lonCentro);
 
-    // 2. CALCULAR A DISTÂNCIA ENTRE OS PONTOS (EM METROS)
-    // Usamos a biblioteca Geolocator que você já tem importada
-    double distanciaEmMetros = Geolocator.distanceBetween(
-      p1.latitude, p1.longitude, 
+    // 2. DISTÂNCIA EM METROS
+    double distancia = Geolocator.distanceBetween(
+      p1.latitude, p1.longitude,
       p2.latitude, p2.longitude
     );
 
-    // 3. DEFINIR O ZOOM BASEADO NA DISTÂNCIA (Regra de Três Logarítmica)
-    // Quanto maior a distância, menor o zoom.
+    // 3. ZOOM CALIBRADO PARA CELULAR EM PÉ (PORTRAIT)
     double zoomLevel;
-    if (distanciaEmMetros < 1000) {
-      zoomLevel = 15.0; // Perto (1km)
-    } else if (distanciaEmMetros < 3000) {
-      zoomLevel = 14.0; // Médio (3km)
-    } else if (distanciaEmMetros < 10000) {
-      zoomLevel = 12.5; // Longe (10km)
+    if (distancia < 1000) {
+      zoomLevel = 16.0; // Vizinhos de rua (<1km)
+    } else if (distancia < 3000) {
+      zoomLevel = 15.0; // Mesmo Bairro (<3km)
+    } else if (distancia < 8000) {
+      zoomLevel = 13.5; // Zona Norte-Sul (<8km)
+    } else if (distancia < 15000) {
+      zoomLevel = 12.5; // Cruzando a cidade (<15km)
+    } else if (distancia < 35000) {
+      zoomLevel = 10.5; // Grande SP / Extremos (<35km)
+    } else if (distancia < 80000) {
+      zoomLevel = 9.0;  // Região Metropolitana (<80km)
+    } else if (distancia < 150000) {
+      zoomLevel = 8.0;  // Campinas <-> SP precisa ser zoom 8!
     } else {
-      zoomLevel = 10.0; // Muito longe (Cidade/Estado)
+      zoomLevel = 6.5;  // Interestadual
     }
 
     try {
-      // Usa newLatLngZoom que é 100% estável no Web
-      await _compMapController!.animateCamera(
+      // 'moveCamera' é instantâneo e não falha se a tela estiver redimensionando
+      _compMapController!.moveCamera(
         CameraUpdate.newLatLngZoom(centro, zoomLevel),
       );
     } catch (e) {
-      print("Erro ao mover câmera: $e");
+      print("Erro zoom: $e");
     }
   }
 
