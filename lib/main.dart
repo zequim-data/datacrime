@@ -563,6 +563,35 @@ Future<void> _ajustarCameraComparacao(LatLng p1, LatLng p2) async {
     }
   }
 
+  Widget _btnCompara(String label, String value) {
+      bool selected = filtroAno == value;
+      return Expanded(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2), // Espaço lateral
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              // Se selecionado = Cor Tema (Laranja), se não = Preto Transparente
+              backgroundColor: selected ? themeColor : Colors.black.withOpacity(0.6),
+              foregroundColor: selected ? Colors.black : Colors.white60,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(vertical: 12), // Altura do botão
+              side: BorderSide(color: selected ? themeColor : Colors.white24),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              setState(() {
+                filtroAno = value;
+              });
+              // Se já tiver feito uma busca, refaz automaticamente com o novo ano!
+              if (_posA != null && _posB != null) {
+                _executarComparacao();
+              }
+            },
+            child: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+        ),
+      );
+    }
   // --- UI DA TELA DE COMPARAÇÃO (MAPA AO FUNDO) ---
   Widget _buildTelaComparacao() {
     return Stack(
@@ -613,6 +642,16 @@ Future<void> _ajustarCameraComparacao(LatLng p1, LatLng p2) async {
               const SizedBox(height: 10),
               _inputLocal(
                   _endereco2Controller, "Local B (Ex: Rua Augusta, 500)"),
+              // --- INSERIR ESTE BLOCO AQUI ---
+              const SizedBox(height: 15),
+              Row(
+                children: [
+                  _btnCompara("2025", "2025"),
+                  _btnCompara("3 ANOS", "3_anos"),
+                  _btnCompara("5 ANOS", "5_anos"),
+                ],
+              ),
+              // -------------------------------
               const SizedBox(height: 20),
               ElevatedButton.icon(
                 icon: const Icon(Icons.analytics, color: Colors.black),
