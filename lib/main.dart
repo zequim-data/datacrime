@@ -134,43 +134,47 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
-  Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
+// Adicione o parâmetro 'double pixelRatio'
+  Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor, double pixelRatio) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
-    
-    // 1. REDUZA O TAMANHO BASE (Sugestão: de 30 para 22 ou 24)
-    const int size = 22; 
-    const double radius = size / 2;
+
+    // 1. DEFINA O TAMANHO LÓGICO (O tamanho que você quer que PAREÇA ter)
+    // 22 é um bom tamanho pequeno para mobile.
+    const double logicalSize = 22.0;
+
+    // 2. CALCULE O TAMANHO FÍSICO REAL (Multiplicando pela densidade da tela)
+    final int sizePx = (logicalSize * pixelRatio).ceil();
+    final double radiusPx = sizePx / 2.0;
 
     final Paint paint = Paint()..color = cor.withOpacity(1.0);
-    
-    // Desenha o círculo principal
-    canvas.drawCircle(const Offset(radius, radius), radius, paint);
 
-    // Borda branca mais fina para acompanhar o tamanho menor
+    // Desenha usando as coordenadas físicas (Px)
+    canvas.drawCircle(Offset(radiusPx, radiusPx), radiusPx, paint);
+
     Paint borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5; 
-    canvas.drawCircle(const Offset(radius, radius), radius, borderPaint);
+      // A borda também precisa escalar com a densidade
+      ..strokeWidth = 1.5 * pixelRatio;
+    canvas.drawCircle(Offset(radiusPx, radiusPx), radiusPx, borderPaint);
 
-    // 2. TEXTO PROPORCIONAL
-    // Se houver mais de 1 ocorrência no ponto, mostra o número
     if (int.tryParse(texto) != null && int.parse(texto) > 1) {
       TextPainter painter = TextPainter(textDirection: TextDirection.ltr);
       painter.text = TextSpan(
           text: texto,
           style: TextStyle(
-              fontSize: size * 0.45, // Ajusta a fonte automaticamente (aprox. 10)
-              color: Colors.black, 
+              // A fonte também escala
+              fontSize: logicalSize * 0.45 * pixelRatio,
+              color: Colors.black,
               fontWeight: FontWeight.bold));
       painter.layout();
-      
-      // Centralização perfeita do texto
-      painter.paint(canvas, Offset((size - painter.width) / 2, (size - painter.height) / 2));
+      // Centraliza usando o tamanho físico
+      painter.paint(canvas, Offset((sizePx - painter.width) / 2, (sizePx - painter.height) / 2));
     }
-    
-    final ui.Image img = await pictureRecorder.endRecording().toImage(size, size);
+
+    // Cria a imagem no tamanho físico final
+    final ui.Image img = await pictureRecorder.endRecording().toImage(sizePx, sizePx);
     final ByteData? data = await img.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.fromBytes(data!.buffer.asUint8List());
   }
@@ -207,6 +211,8 @@ class _MapScreenState extends State<MapScreen> {
         counts[tipo] = (counts[tipo] ?? 0) + 1;
       }
 
+      final double pixelRatio = MediaQuery.of(context).devicePixelRatio;
+
       Set<Marker> newMarkers = {};
       for (var key in clusterCount.keys) {
         var dados = clusterData[key];
@@ -218,9 +224,10 @@ class _MapScreenState extends State<MapScreen> {
           String sev = dados['severidade'] ?? 'LEVE';
           if (sev == 'FATAL') corMarker = Colors.red[900]!;
         }
-        BitmapDescriptor icon =
-            await _criarIconeCustomizado("$totalCluster", corMarker);
-        newMarkers.add(Marker(
+
+        BitmapDescriptor icon = await _criarIconeCustomizado("$totalCluster", corMarker, pixelRatio);
+
+            newMarkers.add(Marker(
             markerId: MarkerId(key),
             position: LatLng(l, ln),
             icon: icon,
