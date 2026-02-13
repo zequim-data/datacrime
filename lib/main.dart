@@ -487,8 +487,9 @@ Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
         _posB = p2;
       });
 
-      // Zoom automático para os dois pontos
-      _ajustarCameraComparacao(p1, p2);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _ajustarCameraComparacao();
+      });
 
       final url = Uri.parse(
           '$baseUrl/comparar?lat1=${p1.latitude}&lon1=${p1.longitude}&lat2=${p2.latitude}&lon2=${p2.longitude}&filtro=$filtroAno');
@@ -506,62 +507,30 @@ Future<BitmapDescriptor> _criarIconeCustomizado(String texto, Color cor) async {
     }
   }
 
-Future<void> _ajustarCameraComparacao(LatLng p1, LatLng p2) async {
-    // Delay para garantir que o teclado sumiu e a tela estabilizou
-    await Future.delayed(const Duration(milliseconds: 800));
+Future<void> _ajustarCameraComparacao() async {
+  if (_compMapController == null || _posA == null || _posB == null) return;
 
-    if (_compMapController == null) return;
+  final southWest = LatLng(
+    _posA!.latitude < _posB!.latitude ? _posA!.latitude : _posB!.latitude,
+    _posA!.longitude < _posB!.longitude ? _posA!.longitude : _posB!.longitude,
+  );
 
-    // 1. CÁLCULO DO CENTRO COM "OFFSET" (PULO DO GATO)
-    // Como a tabela de resultados tapa a parte de baixo da tela,
-    // nós calculamos o centro normal, mas subtraímos um pouco da latitude
-    // para "empurrar" a visão para baixo, fazendo os pontos subirem na tela.
-    double latCentro = (p1.latitude + p2.latitude) / 2;
-    double lonCentro = (p1.longitude + p2.longitude) / 2;
-    
-    // Pequeno ajuste para subir os pinos visualmente
-    // (Testado empiricamente para telas verticais)
-    double offsetVisual = 0.005; 
-    
-    LatLng centroAjustado = LatLng(latCentro - offsetVisual, lonCentro);
+  final northEast = LatLng(
+    _posA!.latitude > _posB!.latitude ? _posA!.latitude : _posB!.latitude,
+    _posA!.longitude > _posB!.longitude ? _posA!.longitude : _posB!.longitude,
+  );
 
-    // 2. DISTÂNCIA REAL
-    double distancia = Geolocator.distanceBetween(
-      p1.latitude, p1.longitude,
-      p2.latitude, p2.longitude
-    );
+  final bounds = LatLngBounds(
+    southwest: southWest,
+    northeast: northEast,
+  );
 
-    // 3. TABELA DE ZOOM "ULTRA CONSERVADORA"
-    // Reduzi todos os zooms em 1 ou 2 pontos para garantir que cabe.
-    double zoomLevel;
-    
-    if (distancia < 2000) {        // < 2km
-      zoomLevel = 13.5; 
-    } else if (distancia < 5000) { // < 5km
-      zoomLevel = 12.5;
-    } else if (distancia < 10000) { // < 10km
-      zoomLevel = 11.5;
-    } else if (distancia < 25000) { // < 25km (Cidade SP Norte-Sul)
-      zoomLevel = 10.0; 
-    } else if (distancia < 50000) { // < 50km (Grande SP)
-      zoomLevel = 9.0;
-    } else if (distancia < 100000) { // < 100km (Campinas-SP)
-      zoomLevel = 8.0; 
-    } else if (distancia < 200000) { // < 200km (Litoral/Interior)
-      zoomLevel = 7.0; 
-    } else {                         // Interestadual
-      zoomLevel = 5.5; 
-    }
+  await Future.delayed(const Duration(milliseconds: 300));
 
-    try {
-      print("Distancia: $distancia m | Zoom aplicado: $zoomLevel"); // Para debug no console
-      _compMapController!.moveCamera(
-        CameraUpdate.newLatLngZoom(centroAjustado, zoomLevel),
-      );
-    } catch (e) {
-      print("Erro zoom: $e");
-    }
-  }
+  _compMapController!.animateCamera(
+    CameraUpdate.newLatLngBounds(bounds, 120),
+  );
+}
 
   Widget _btnCompara(String label, String value) {
       bool selected = filtroAno == value;
@@ -600,7 +569,16 @@ Future<void> _ajustarCameraComparacao(LatLng p1, LatLng p2) async {
         GoogleMap(
           initialCameraPosition:
               const CameraPosition(target: LatLng(-23.55, -46.63), zoom: 11),
-          onMapCreated: (c) => _compMapController = c,
+          onMapCreated: (c) {
+            _compMapController = c;
+
+            // Se já houver pontos definidos, ajusta
+            if (_posA != null && _posB != null) {
+              Future.delayed(const Duration(milliseconds: 300), () {
+                _ajustarCameraComparacao();
+              });
+            }
+          },
           zoomControlsEnabled: false,
           myLocationButtonEnabled: false,
           markers: {
@@ -620,7 +598,7 @@ Future<void> _ajustarCameraComparacao(LatLng p1, LatLng p2) async {
         ),
 
         // 2. Overlay Escuro (Efeito Vidro)
-        Container(color: Colors.black.withOpacity(0.75)),
+        Container(color: Colors.black.withOpacity(0.4)),
 
         // 3. Interface de Dados
         _bloqueioMapa(
