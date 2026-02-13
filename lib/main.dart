@@ -42,7 +42,6 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  //final Completer<GoogleMapController> _controller = Completer();
   GoogleMapController? _mapController;
   final TextEditingController _searchController = TextEditingController();
 
@@ -51,6 +50,11 @@ class _MapScreenState extends State<MapScreen> {
   final TextEditingController _endereco2Controller = TextEditingController();
   Map<String, dynamic>? _resultadoComparacao;
   bool _comparando = false;
+
+  // Variáveis para o Mapa de Fundo da Comparação
+  GoogleMapController? _compMapController;
+  LatLng? _posA;
+  LatLng? _posB;
 
   // --- CONFIGURAÇÕES ---
   final String googleApiKey = "AIzaSyDszIW2iBdyxbIo_NavRtpReKn8Lkrcbr8";
@@ -63,8 +67,7 @@ class _MapScreenState extends State<MapScreen> {
 
   double raioBusca = 300.0;
   String filtroAno = "2025";
-  int menuIndex =
-      0; // 0: Celular, 1: Veiculo, 2: Acidente, 3: Criminal, 4: Comparar
+  int menuIndex = 0;
 
   Map<String, int> estatisticasMarcas = {};
   bool carregando = false;
@@ -88,13 +91,10 @@ class _MapScreenState extends State<MapScreen> {
     setState(() => carregando = true);
     FocusScope.of(context).unfocus();
 
-    // Reutilizando a função robusta de geocoding
     LatLng? destino = await _getLatLon(endereco);
 
     if (destino != null) {
-      //final GoogleMapController controller = await _controller.future;
       _mapController?.animateCamera(CameraUpdate.newLatLngZoom(destino, 16));
-      //controller.animateCamera(CameraUpdate.newLatLngZoom(destino, 16));
       buscarCrimes(destino);
     } else {
       _snack("Endereço não encontrado.");
@@ -102,7 +102,6 @@ class _MapScreenState extends State<MapScreen> {
     setState(() => carregando = false);
   }
 
-  // Função Genérica para Geocodificar (Usada na busca e na comparação)
   Future<LatLng?> _getLatLon(String endereco) async {
     final url = Uri.parse(
         "https://maps.googleapis.com/maps/api/geocode/json?address=$endereco&components=country:BR|administrative_area:SP&key=$googleApiKey");
@@ -181,8 +180,6 @@ class _MapScreenState extends State<MapScreen> {
 
       final Map<String, dynamic> responseData = json.decode(response.body);
       final List<dynamic> crimes = responseData['data'] ?? [];
-      if (crimes.isEmpty)
-        _snack("Zero registros de '$tipoCrimeParam' para '$filtroAno' aqui.");
 
       Map<String, int> counts = {};
       Map<String, int> clusterCount = {};
@@ -237,8 +234,6 @@ class _MapScreenState extends State<MapScreen> {
         String body = utf8.decode(response.bodyBytes);
         final Map<String, dynamic> responseData = json.decode(body);
         _exibirGavetaDetalhes(responseData['data'] ?? []);
-      } else {
-        _snack("Erro Detalhes: ${response.statusCode}");
       }
     } catch (e) {
       _snack("Erro ao buscar detalhes.");
@@ -450,11 +445,8 @@ class _MapScreenState extends State<MapScreen> {
     LocationPermission p = await Geolocator.requestPermission();
     if (p != LocationPermission.denied) {
       Position pos = await Geolocator.getCurrentPosition();
-      //final GoogleMapController controller = await _controller.future;
-      //controller.animateCamera(CameraUpdate.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 15));
       _mapController?.animateCamera(
-              CameraUpdate.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 15)
-            );
+          CameraUpdate.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 15));
       buscarCrimes(LatLng(pos.latitude, pos.longitude));
     }
   }
@@ -462,7 +454,7 @@ class _MapScreenState extends State<MapScreen> {
   void _snack(String t) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(t), backgroundColor: Colors.red));
 
-  // --- NOVA FUNCIONALIDADE: EXECUTA COMPARAÇÃO ---
+  // --- COMPARAÇÃO: LÓGICA DE ZOOM E MAPA ---
   Future<void> _executarComparacao() async {
     if (_endereco1Controller.text.isEmpty ||
         _endereco2Controller.text.isEmpty) {
@@ -474,10 +466,17 @@ class _MapScreenState extends State<MapScreen> {
 
     try {
       LatLng? p1 = await _getLatLon(_endereco1Controller.text);
-      if (p1 == null)
-        throw "Local A não encontrado (Tente ser mais específico, ex: Rua Augusta, SP).";
+      if (p1 == null) throw "Local A não encontrado.";
       LatLng? p2 = await _getLatLon(_endereco2Controller.text);
       if (p2 == null) throw "Local B não encontrado.";
+
+      setState(() {
+        _posA = p1;
+        _posB = p2;
+      });
+
+      // Zoom automático para os dois pontos
+      _ajustarCameraComparacao(p1, p2);
 
       final url = Uri.parse(
           '$baseUrl/comparar?lat1=${p1.latitude}&lon1=${p1.longitude}&lat2=${p2.latitude}&lon2=${p2.longitude}&filtro=$filtroAno');
@@ -495,43 +494,98 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  // --- UI DA TELA DE COMPARAÇÃO ---
+  void _ajustarCameraComparacao(LatLng p1, LatLng p2) {
+    if (_compMapController == null) return;
+
+    LatLngBounds bounds;
+    if (p1.latitude > p2.latitude && p1.longitude > p2.longitude) {
+      bounds = LatLngBounds(southwest: p2, northeast: p1);
+    } else if (p1.longitude > p2.longitude) {
+      bounds = LatLngBounds(
+          southwest: LatLng(p1.latitude, p2.longitude),
+          northeast: LatLng(p2.latitude, p1.longitude));
+    } else if (p1.latitude > p2.latitude) {
+      bounds = LatLngBounds(
+          southwest: LatLng(p2.latitude, p1.longitude),
+          northeast: LatLng(p1.latitude, p2.longitude));
+    } else {
+      bounds = LatLngBounds(southwest: p1, northeast: p2);
+    }
+
+    _compMapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
+  }
+
+  // --- UI DA TELA DE COMPARAÇÃO (MAPA AO FUNDO) ---
   Widget _buildTelaComparacao() {
-    return Container(
-      color: Colors.black,
-      padding: const EdgeInsets.all(20),
-      child: Column(children: [
-        const SizedBox(height: 40),
-        Text("DUELO DE LOCAIS",
-            style: TextStyle(
-                color: themeColor,
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5)),
-        const Text("Compare a segurança de dois endereços (Raio 500m)",
-            style: TextStyle(color: Colors.white54, fontSize: 12)),
-        const SizedBox(height: 20),
-        _inputLocal(_endereco1Controller, "Local A (Ex: Av Paulista, 1000)"),
-        const SizedBox(height: 10),
-        _inputLocal(_endereco2Controller, "Local B (Ex: Rua Augusta, 500)"),
-        const SizedBox(height: 20),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.analytics, color: Colors.black),
-          label: const Text("COMPARAR",
-              style:
-                  TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          style: ElevatedButton.styleFrom(
-              backgroundColor: themeColor,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 50, vertical: 15)),
-          onPressed: _executarComparacao,
+    return Stack(
+      children: [
+        // 1. Mapa de Fundo
+        GoogleMap(
+          initialCameraPosition:
+              const CameraPosition(target: LatLng(-23.55, -46.63), zoom: 11),
+          onMapCreated: (c) => _compMapController = c,
+          zoomControlsEnabled: false,
+          myLocationButtonEnabled: false,
+          markers: {
+            if (_posA != null)
+              Marker(
+                  markerId: const MarkerId("A"),
+                  position: _posA!,
+                  icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueOrange)),
+            if (_posB != null)
+              Marker(
+                  markerId: const MarkerId("B"),
+                  position: _posB!,
+                  icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueCyan)),
+          },
         ),
-        const SizedBox(height: 20),
-        if (_comparando)
-          const CircularProgressIndicator()
-        else if (_resultadoComparacao != null)
-          _buildTabelaResultados(),
-      ]),
+
+        // 2. Overlay Escuro (Efeito Vidro)
+        Container(color: Colors.black.withOpacity(0.75)),
+
+        // 3. Interface de Dados
+        _bloqueioMapa(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(children: [
+              const SizedBox(height: 40),
+              Text("DUELO DE LOCAIS",
+                  style: TextStyle(
+                      color: themeColor,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5)),
+              const Text("Compare a segurança de dois endereços (Raio 500m)",
+                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              const SizedBox(height: 20),
+              _inputLocal(
+                  _endereco1Controller, "Local A (Ex: Av Paulista, 1000)"),
+              const SizedBox(height: 10),
+              _inputLocal(
+                  _endereco2Controller, "Local B (Ex: Rua Augusta, 500)"),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.analytics, color: Colors.black),
+                label: const Text("COMPARAR",
+                    style: TextStyle(
+                        color: Colors.black, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: themeColor,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 50, vertical: 15)),
+                onPressed: _executarComparacao,
+              ),
+              const SizedBox(height: 20),
+              if (_comparando)
+                const CircularProgressIndicator()
+              else if (_resultadoComparacao != null)
+                _buildTabelaResultados(),
+            ]),
+          ),
+        ),
+      ],
     );
   }
 
@@ -543,7 +597,7 @@ class _MapScreenState extends State<MapScreen> {
         labelText: hint,
         labelStyle: const TextStyle(color: Colors.white54),
         filled: true,
-        fillColor: Colors.grey[900],
+        fillColor: Colors.black.withOpacity(0.6),
         border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
             borderSide: BorderSide(color: themeColor)),
@@ -559,49 +613,57 @@ class _MapScreenState extends State<MapScreen> {
     var a = r['local_a'];
     var b = r['local_b'];
 
-    return Expanded(
-      child: Center( // 1. Centraliza na tela
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 800), // 2. Trava a largura máxima (não estica)
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-              color: Colors.grey[900],
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: Colors.white10)),
-          child: Column(
-            mainAxisSize: MainAxisSize.min, // Ajusta altura ao conteúdo
-            children: [
-              // CABEÇALHO ALINHADO
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(children: [
-                  Expanded(flex: 4, child: const Text("INDICADOR (Raio 500m)", style: TextStyle(color: Colors.white54, fontSize: 12))),
-                  Expanded(flex: 2, child: Center(child: Text("LOCAL A", style: TextStyle(color: themeColor, fontWeight: FontWeight.bold)))),
-                  Expanded(flex: 2, child: Center(child: Text("LOCAL B", style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)))),
-                ]),
-              ),
-              const Divider(color: Colors.white24),
-
-              // LINHAS DE DADOS
-              _linhaComp("Roubos de Celular", a['celular'], b['celular']),
-              _linhaComp("Roubos de Veículo", a['veiculo'], b['veiculo']),
-              _linhaComp("Ocorrências Policiais", a['criminal'], b['criminal']),
-              _linhaComp("Acidentes de Trânsito", a['acidente'], b['acidente']), // Caso tenha adicionado acidentes
-
-              const Divider(color: Colors.white24),
-              _linhaComp("TOTAL GERAL", r['total_a'], r['total_b'], destaque: true),
-            ],
-          ),
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 800),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+            color: Colors.grey[900]?.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: Colors.white10)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(children: [
+                Expanded(
+                    flex: 4,
+                    child: const Text("INDICADOR (Raio 500m)",
+                        style: TextStyle(color: Colors.white54, fontSize: 12))),
+                Expanded(
+                    flex: 2,
+                    child: Center(
+                        child: Text("LOCAL A",
+                            style: TextStyle(
+                                color: themeColor,
+                                fontWeight: FontWeight.bold)))),
+                Expanded(
+                    flex: 2,
+                    child: Center(
+                        child: Text("LOCAL B",
+                            style: TextStyle(
+                                color: Colors.cyanAccent,
+                                fontWeight: FontWeight.bold)))),
+              ]),
+            ),
+            const Divider(color: Colors.white24),
+            _linhaComp("Roubos de Celular", a['celular'], b['celular']),
+            _linhaComp("Roubos de Veículo", a['veiculo'], b['veiculo']),
+            _linhaComp("Ocorrências Policiais", a['criminal'], b['criminal']),
+            _linhaComp("Acidentes de Trânsito", a['acidente'], b['acidente']),
+            const Divider(color: Colors.white24),
+            _linhaComp("TOTAL GERAL", r['total_a'], r['total_b'],
+                destaque: true),
+          ],
         ),
       ),
     );
   }
 
   Widget _linhaComp(String label, int v1, int v2, {bool destaque = false}) {
-    // Lógica de Cores (Quem tem menos crime ganha verde)
     Color corV1 = Colors.white;
     Color corV2 = Colors.white;
-
     if (v1 < v2) {
       corV1 = Colors.greenAccent;
       corV2 = Colors.redAccent;
@@ -609,18 +671,29 @@ class _MapScreenState extends State<MapScreen> {
       corV1 = Colors.redAccent;
       corV2 = Colors.greenAccent;
     }
-    
-    // Estilos de texto aumentados para melhor leitura
-    TextStyle styleLabel = TextStyle(color: Colors.white, fontSize: 14, fontWeight: destaque ? FontWeight.bold : FontWeight.normal);
-    TextStyle styleNum = TextStyle(fontSize: 18, fontWeight: FontWeight.bold);
+    TextStyle styleLabel = TextStyle(
+        color: Colors.white,
+        fontSize: 14,
+        fontWeight: destaque ? FontWeight.bold : FontWeight.normal);
+    TextStyle styleNum =
+        const TextStyle(fontSize: 18, fontWeight: FontWeight.bold);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12), // Mais respiro entre as linhas
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(children: [
-        // 3. Colunas Proporcionais (Flex) para alinhar perfeito com o cabeçalho
         Expanded(flex: 4, child: Text(label, style: styleLabel)),
-        Expanded(flex: 2, child: Center(child: Text("$v1", style: styleNum.copyWith(color: destaque ? corV1 : Colors.white)))),
-        Expanded(flex: 2, child: Center(child: Text("$v2", style: styleNum.copyWith(color: destaque ? corV2 : Colors.white)))),
+        Expanded(
+            flex: 2,
+            child: Center(
+                child: Text("$v1",
+                    style: styleNum.copyWith(
+                        color: destaque ? corV1 : Colors.white)))),
+        Expanded(
+            flex: 2,
+            child: Center(
+                child: Text("$v2",
+                    style: styleNum.copyWith(
+                        color: destaque ? corV2 : Colors.white)))),
       ]),
     );
   }
@@ -653,7 +726,7 @@ class _MapScreenState extends State<MapScreen> {
           BottomNavigationBarItem(
               icon: Icon(Icons.local_police), label: "Polícia"),
           BottomNavigationBarItem(
-              icon: Icon(Icons.compare_arrows), label: "Comparar"), // NOVO
+              icon: Icon(Icons.compare_arrows), label: "Comparar"),
         ],
       ),
       body: menuIndex == 4
@@ -663,10 +736,7 @@ class _MapScreenState extends State<MapScreen> {
                 mapType: MapType.normal,
                 initialCameraPosition: const CameraPosition(
                     target: LatLng(-23.5505, -46.6333), zoom: 14.4746),
-                onMapCreated: (c) {
-                  //_controller.complete(c);
-                  _mapController = c;
-                },
+                onMapCreated: (c) => _mapController = c,
                 markers: _markers,
                 circles: _circles,
                 myLocationEnabled: true,
